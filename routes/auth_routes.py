@@ -1,6 +1,7 @@
 import bcrypt
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from utils.supabase import supabase  # this is supabase object defined in /utils directory
+from utils.jwt_utils import generate_jwt_token, verify_jwt_token
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -55,6 +56,20 @@ def login():
     stored_hash = user["password"].encode("utf-8")
 
     if bcrypt.checkpw(password.encode("utf-8"), stored_hash):
-        return jsonify({"message": "Login successful", "user_id": user["id"]}), 200
+        token = generate_jwt_token(user)
+        
+        return jsonify({
+            "message": "Login successful",
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "email": user["email"],
+                "name": user["name"],
+                "role": user["role"]
+            }
+        }), 200
     else:
         return jsonify({"error": "Invalid email or password"}), 401
+
+
+
