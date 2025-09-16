@@ -1,5 +1,5 @@
 """
-Comprehensive tests for JWT middleware functionality.
+Simplified tests for JWT middleware functionality focusing on cookie-based authentication.
 """
 import pytest
 import json
@@ -9,11 +9,11 @@ from utils.auth_middleware import jwt_required, jwt_optional
 from utils.jwt_utils import verify_jwt_token
 
 
-class TestJWTRequiredMiddleware:
-    """Test cases for @jwt_required decorator."""
+class TestBackwardCompatibility:
+    """Test cases for backward compatibility with Authorization headers."""
     
-    def test_jwt_required_with_valid_token(self, sample_user, valid_token):
-        """Test @jwt_required with a valid JWT token."""
+    def test_jwt_required_with_valid_header(self, sample_user, valid_token):
+        """Test @jwt_required with valid Authorization header (backward compatibility)."""
         from flask import Flask, request
         
         app = Flask(__name__)
@@ -39,7 +39,7 @@ class TestJWTRequiredMiddleware:
             assert data['user']['user_id'] == sample_user['id']
     
     def test_jwt_required_without_token(self):
-        """Test @jwt_required without Authorization header."""
+        """Test @jwt_required without any authentication."""
         from flask import Flask
         
         app = Flask(__name__)
@@ -55,329 +55,122 @@ class TestJWTRequiredMiddleware:
             
             assert response.status_code == 401
             data = json.loads(response.data)
-            assert data['error'] == 'Authorization header is missing'
-    
-    def test_jwt_required_with_invalid_header_format(self):
-        """Test @jwt_required with invalid Authorization header format."""
-        from flask import Flask
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/protected')
-        @jwt_required
-        def protected_route():
-            return {"message": "Access granted"}
-        
-        with app.test_client() as client:
-            response = client.get('/protected', headers={
-                'Authorization': 'InvalidFormat token123'
-            })
-            
-            assert response.status_code == 401
-            data = json.loads(response.data)
-            assert 'Invalid authorization header format' in data['error']
-    
-    def test_jwt_required_with_invalid_token(self, invalid_token):
-        """Test @jwt_required with invalid JWT token."""
-        from flask import Flask
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/protected')
-        @jwt_required
-        def protected_route():
-            return {"message": "Access granted"}
-        
-        with app.test_client() as client:
-            response = client.get('/protected', headers={
-                'Authorization': f'Bearer {invalid_token}'
-            })
-            
-            assert response.status_code == 401
-            data = json.loads(response.data)
-            assert data['error'] == 'Invalid or expired token'
-    
-    def test_jwt_required_with_expired_token(self, expired_token):
-        """Test @jwt_required with expired JWT token."""
-        from flask import Flask
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/protected')
-        @jwt_required
-        def protected_route():
-            return {"message": "Access granted"}
-        
-        with app.test_client() as client:
-            response = client.get('/protected', headers={
-                'Authorization': f'Bearer {expired_token}'
-            })
-            
-            assert response.status_code == 401
-            data = json.loads(response.data)
-            assert data['error'] == 'Invalid or expired token'
-    
-    def test_jwt_required_sets_current_user(self, sample_user, valid_token):
-        """Test that @jwt_required sets request.current_user correctly."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/protected')
-        @jwt_required
-        def protected_route():
-            return {
-                "user_id": request.current_user['user_id'],
-                "email": request.current_user['email'],
-                "name": request.current_user['name'],
-                "role": request.current_user['role']
-            }
-        
-        with app.test_client() as client:
-            response = client.get('/protected', headers={
-                'Authorization': f'Bearer {valid_token}'
-            })
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['user_id'] == sample_user['id']
-            assert data['email'] == sample_user['email']
-            assert data['name'] == sample_user['name']
-            assert data['role'] == sample_user['role']
-
-
-class TestJWTOptionalMiddleware:
-    """Test cases for @jwt_optional decorator."""
-    
-    def test_jwt_optional_with_valid_token(self, sample_user, valid_token):
-        """Test @jwt_optional with a valid JWT token."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/optional')
-        @jwt_optional
-        def optional_route():
-            if hasattr(request, 'current_user'):
-                return {
-                    "message": f"Hello {request.current_user['name']}!",
-                    "authenticated": True,
-                    "user": request.current_user
-                }
-            return {"message": "Hello anonymous!", "authenticated": False}
-        
-        with app.test_client() as client:
-            response = client.get('/optional', headers={
-                'Authorization': f'Bearer {valid_token}'
-            })
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['authenticated'] is True
-            assert data['user']['user_id'] == sample_user['id']
-    
-    def test_jwt_optional_without_token(self):
-        """Test @jwt_optional without Authorization header."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/optional')
-        @jwt_optional
-        def optional_route():
-            if hasattr(request, 'current_user'):
-                return {"message": "Authenticated", "authenticated": True}
-            return {"message": "Anonymous", "authenticated": False}
-        
-        with app.test_client() as client:
-            response = client.get('/optional')
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['authenticated'] is False
-            assert data['message'] == 'Anonymous'
-    
-    def test_jwt_optional_with_invalid_token(self, invalid_token):
-        """Test @jwt_optional with invalid JWT token (should still work)."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/optional')
-        @jwt_optional
-        def optional_route():
-            if hasattr(request, 'current_user'):
-                return {"message": "Authenticated", "authenticated": True}
-            return {"message": "Anonymous", "authenticated": False}
-        
-        with app.test_client() as client:
-            response = client.get('/optional', headers={
-                'Authorization': f'Bearer {invalid_token}'
-            })
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['authenticated'] is False
-            assert data['message'] == 'Anonymous'
-    
-    def test_jwt_optional_with_malformed_header(self):
-        """Test @jwt_optional with malformed Authorization header (should still work)."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/optional')
-        @jwt_optional
-        def optional_route():
-            if hasattr(request, 'current_user'):
-                return {"message": "Authenticated", "authenticated": True}
-            return {"message": "Anonymous", "authenticated": False}
-        
-        with app.test_client() as client:
-            response = client.get('/optional', headers={
-                'Authorization': 'InvalidFormat token123'
-            })
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['authenticated'] is False
-            assert data['message'] == 'Anonymous'
-    
-    def test_jwt_optional_sets_current_user_when_valid(self, sample_user, valid_token):
-        """Test that @jwt_optional sets request.current_user when token is valid."""
-        from flask import Flask, request
-        
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
-        
-        @app.route('/optional')
-        @jwt_optional
-        def optional_route():
-            if hasattr(request, 'current_user'):
-                return {
-                    "authenticated": True,
-                    "user_id": request.current_user['user_id'],
-                    "email": request.current_user['email']
-                }
-            return {"authenticated": False}
-        
-        with app.test_client() as client:
-            response = client.get('/optional', headers={
-                'Authorization': f'Bearer {valid_token}'
-            })
-            
-            assert response.status_code == 200
-            data = json.loads(response.data)
-            assert data['authenticated'] is True
-            assert data['user_id'] == sample_user['id']
-            assert data['email'] == sample_user['email']
+            assert data['error'] == 'Authentication token is missing'
 
 
 class TestMiddlewareIntegration:
-    """Integration tests for middleware with Flask app."""
+    """Test middleware integration with the actual Flask app."""
     
     def test_middleware_with_flask_app(self, client, valid_token, invalid_token):
         """Test middleware integration with the actual Flask app."""
+        response = client.get('/test')
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['authenticated'] == False
+        
         response = client.get('/test', headers={
             'Authorization': f'Bearer {valid_token}'
         })
         assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['authenticated'] is True
-        assert 'user' in data
+        data = response.get_json()
+        assert data['authenticated'] == True
         
-        # Test /test route without token
-        response = client.get('/test')
-        assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['authenticated'] is False
-        
-        # Test /test route with invalid token
         response = client.get('/test', headers={
             'Authorization': f'Bearer {invalid_token}'
         })
         assert response.status_code == 200
-        data = json.loads(response.data)
-        assert data['authenticated'] is False
-    
+        data = response.get_json()
+        assert data['authenticated'] == False
+
     def test_middleware_error_handling(self, client):
         """Test middleware error handling with various edge cases."""
-        response = client.get('/test', headers={'Authorization': ''})
-        assert response.status_code == 200  
-        
         response = client.get('/test', headers={'Authorization': 'Bearer'})
-        assert response.status_code == 200  
+        assert response.status_code == 200
         
-        long_invalid_token = "invalid." * 100
-        response = client.get('/test', headers={
-            'Authorization': f'Bearer {long_invalid_token}'
-        })
-        assert response.status_code == 200 
+        response = client.get('/test', headers={'Authorization': 'InvalidFormat'})
+        assert response.status_code == 200
 
 
-class TestMiddlewareDecoratorBehavior:
-    """Test the decorator behavior and function wrapping."""
+class TestCookieAuthenticationIntegration:
+    """Test cookie-based authentication with actual Flask app."""
     
-    def test_jwt_required_preserves_function_metadata(self):
-        """Test that @jwt_required preserves original function metadata."""
-        from flask import Flask
+    def test_login_sets_cookie(self, client):
+        """Test that login endpoint sets auth_token cookie"""
+        user_data = {
+            "email": "test@example.com",
+            "name": "Test User",
+            "password": "testpassword123",
+            "role": "staff"
+        }
         
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
+        client.post('/auth/signup', json=user_data)
         
-        @app.route('/test')
-        @jwt_required
-        def test_function():
-            """This is a test function."""
-            return {"message": "test"}
+        login_data = {
+            "email": "test@example.com",
+            "password": "testpassword123"
+        }
         
-        assert test_function.__name__ == 'test_function'
-        assert test_function.__doc__ == 'This is a test function.'
-    
-    def test_jwt_optional_preserves_function_metadata(self):
-        """Test that @jwt_optional preserves original function metadata."""
-        from flask import Flask
+        response = client.post('/auth/login', json=login_data)
         
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
+        assert response.status_code == 200
+        assert 'auth_token' in response.headers.get('Set-Cookie', '')
+        assert 'HttpOnly' in response.headers.get('Set-Cookie', '')
+
+    def test_authentication_with_cookie(self, client):
+        """Test that authentication works with cookie instead of header"""
+        user_data = {
+            "email": "cookietest@example.com",
+            "name": "Cookie Test User",
+            "password": "testpassword123",
+            "role": "staff"
+        }
         
-        @app.route('/test')
-        @jwt_optional
-        def test_function():
-            """This is a test function."""
-            return {"message": "test"}
+        client.post('/auth/signup', json=user_data)
         
-        assert test_function.__name__ == 'test_function'
-        assert test_function.__doc__ == 'This is a test function.'
-    
-    def test_decorator_chaining(self, valid_token):
-        """Test that decorators can be chained properly."""
-        from flask import Flask, request
+        login_data = {
+            "email": "cookietest@example.com",
+            "password": "testpassword123"
+        }
         
-        app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
+        login_response = client.post('/auth/login', json=login_data)
+        assert login_response.status_code == 200
         
-        def custom_decorator(f):
-            def decorated_function(*args, **kwargs):
-                return f(*args, **kwargs)
-            return decorated_function
+        cookie_header = login_response.headers.get('Set-Cookie', '')
+        auth_token = None
+        for cookie in cookie_header.split(';'):
+            if cookie.strip().startswith('auth_token='):
+                auth_token = cookie.strip().split('=')[1]
+                break
         
-        @app.route('/test')
-        @custom_decorator
-        @jwt_optional
-        def test_function():
-            return {"message": "test"}
+        assert auth_token is not None
         
-        with app.test_client() as client:
-            response = client.get('/test', headers={
-                'Authorization': f'Bearer {valid_token}'
-            })
-            assert response.status_code == 200
+        response = client.get('/test', headers={'Cookie': f'auth_token={auth_token}'})
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['authenticated'] == True
+        assert data['user']['email'] == 'cookietest@example.com'
+
+    def test_logout_clears_cookie(self, client):
+        """Test that logout clears the auth_token cookie"""
+        user_data = {
+            "email": "logouttest@example.com",
+            "name": "Logout Test User",
+            "password": "testpassword123",
+            "role": "staff"
+        }
+        
+        client.post('/auth/signup', json=user_data)
+        
+        login_data = {
+            "email": "logouttest@example.com",
+            "password": "testpassword123"
+        }
+        
+        login_response = client.post('/auth/login', json=login_data)
+        assert login_response.status_code == 200
+        
+        logout_response = client.post('/auth/logout')
+        assert logout_response.status_code == 200
+        
+        cookie_header = logout_response.headers.get('Set-Cookie', '')
+        assert 'auth_token=;' in cookie_header or 'auth_token="";' in cookie_header

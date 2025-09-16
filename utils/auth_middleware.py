@@ -6,8 +6,9 @@ def jwt_required(f):
     """
     Decorator that requires JWT authentication for a route.
     
-    Validates JWT token from Authorization header. Returns 401 if token is missing,
-    invalid, or expired. User info is available in request.current_user.
+    Validates JWT token from Authorization header or auth_token cookie. 
+    Returns 401 if token is missing, invalid, or expired. 
+    User info is available in request.current_user.
     
     Example:
         @jwt_required
@@ -16,15 +17,19 @@ def jwt_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        token = None
+        
+        # Try to get token from Authorization header first
         auth_header = request.headers.get('Authorization')
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
         
-        if not auth_header:
-            return jsonify({"error": "Authorization header is missing"}), 401
+        # If no token in header, try to get from cookie
+        if not token:
+            token = request.cookies.get('auth_token')
         
-        if not auth_header.startswith('Bearer '):
-            return jsonify({"error": "Invalid authorization header format. Expected 'Bearer <token>'"}), 401
-        
-        token = auth_header.split(' ')[1]
+        if not token:
+            return jsonify({"error": "Authentication token is missing"}), 401
         
         payload = verify_jwt_token(token)
         
@@ -41,7 +46,8 @@ def jwt_optional(f):
     """
     Decorator that provides optional JWT authentication for a route.
     
-    Validates JWT token if present, but doesn't block request if missing/invalid.
+    Validates JWT token from Authorization header or auth_token cookie if present, 
+    but doesn't block request if missing/invalid.
     User info available in request.current_user when authenticated.
     
     Example:
@@ -53,12 +59,19 @@ def jwt_optional(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
+        token = None
         
+        # Try to get token from Authorization header first
+        auth_header = request.headers.get('Authorization')
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
+        
+        # If no token in header, try to get from cookie
+        if not token:
+            token = request.cookies.get('auth_token')
+        
+        if token:
             payload = verify_jwt_token(token)
-            
             if payload is not None:
                 request.current_user = payload
         
