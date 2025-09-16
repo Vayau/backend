@@ -1,5 +1,6 @@
 from flask import Flask
 from routes.auth_routes import auth_bp
+from routes.document_routes import docs_bp
 import os
 from dotenv import load_dotenv
 
@@ -10,6 +11,7 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'secret-key')
 
 # this blueprint will help us to organise the routes properly
 app.register_blueprint(auth_bp, url_prefix="/auth")
+app.register_blueprint(docs_bp, url_prefix="/document")
 
 @app.route("/test")
 def test():
