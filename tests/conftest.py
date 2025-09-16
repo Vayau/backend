@@ -5,8 +5,12 @@ import pytest
 import os
 import sys
 from unittest.mock import patch, MagicMock
+from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load test environment variables
+load_dotenv('.env.test')
 
 from app import app
 from utils.jwt_utils import generate_jwt_token
@@ -14,9 +18,17 @@ from utils.jwt_utils import generate_jwt_token
 @pytest.fixture
 def client():
     """Create a test client for the Flask app."""
+    # Set a test-specific JWT secret for testing
+    original_secret = app.config.get('JWT_SECRET_KEY')
+    test_secret = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
+    app.config['JWT_SECRET_KEY'] = test_secret
     app.config['TESTING'] = True
+    
     with app.test_client() as client:
         yield client
+    
+    # Restore original secret after test
+    app.config['JWT_SECRET_KEY'] = original_secret
 
 #define a sample user
 @pytest.fixture
@@ -34,7 +46,9 @@ def valid_token(sample_user):
     """Generate a valid JWT token for testing."""
     import jwt
     from datetime import datetime, timedelta
-    from app import app
+    
+    # Use test secret key from environment
+    test_secret_key = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
     
     payload = {
         'user_id': sample_user['id'],
@@ -45,8 +59,7 @@ def valid_token(sample_user):
         'iat': datetime.utcnow()
     }
     
-    with app.app_context():
-        return jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return jwt.encode(payload, test_secret_key, algorithm='HS256')
 
 #define an invalid token
 @pytest.fixture

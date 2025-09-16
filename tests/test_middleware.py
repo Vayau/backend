@@ -3,6 +3,7 @@ Comprehensive tests for JWT middleware functionality.
 """
 import pytest
 import json
+import os
 from unittest.mock import patch, MagicMock
 from utils.auth_middleware import jwt_required, jwt_optional
 from utils.jwt_utils import verify_jwt_token
@@ -16,7 +17,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -42,7 +43,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -61,7 +62,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -82,7 +83,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -103,7 +104,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -124,7 +125,7 @@ class TestJWTRequiredMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/protected')
         @jwt_required
@@ -157,7 +158,7 @@ class TestJWTOptionalMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/optional')
         @jwt_optional
@@ -185,7 +186,7 @@ class TestJWTOptionalMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/optional')
         @jwt_optional
@@ -207,7 +208,7 @@ class TestJWTOptionalMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/optional')
         @jwt_optional
@@ -231,7 +232,7 @@ class TestJWTOptionalMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/optional')
         @jwt_optional
@@ -255,7 +256,7 @@ class TestJWTOptionalMiddleware:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/optional')
         @jwt_optional
@@ -330,7 +331,7 @@ class TestMiddlewareDecoratorBehavior:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/test')
         @jwt_required
@@ -346,7 +347,7 @@ class TestMiddlewareDecoratorBehavior:
         from flask import Flask
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         @app.route('/test')
         @jwt_optional
@@ -362,7 +363,7 @@ class TestMiddlewareDecoratorBehavior:
         from flask import Flask, request
         
         app = Flask(__name__)
-        app.config['JWT_SECRET_KEY'] = 'f270e33cbbb66099ed613db6f96b9720e2494f3e82de7bda90ee9dc0308f227c'
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'test-secret-key-for-testing-only')
         
         def custom_decorator(f):
             def decorated_function(*args, **kwargs):

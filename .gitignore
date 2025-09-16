@@ -1,5 +1,6 @@
 venv/
 .env
+.env.test
 
 # Ignore Python cache
 __pycache__/
