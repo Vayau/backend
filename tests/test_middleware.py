@@ -285,7 +285,6 @@ class TestMiddlewareIntegration:
     
     def test_middleware_with_flask_app(self, client, valid_token, invalid_token):
         """Test middleware integration with the actual Flask app."""
-        # Test /test route with valid token
         response = client.get('/test', headers={
             'Authorization': f'Bearer {valid_token}'
         })
@@ -310,20 +309,17 @@ class TestMiddlewareIntegration:
     
     def test_middleware_error_handling(self, client):
         """Test middleware error handling with various edge cases."""
-        # Test with empty Authorization header
         response = client.get('/test', headers={'Authorization': ''})
-        assert response.status_code == 200  # jwt_optional should handle this gracefully
+        assert response.status_code == 200  
         
-        # Test with just "Bearer" without token
         response = client.get('/test', headers={'Authorization': 'Bearer'})
-        assert response.status_code == 200  # jwt_optional should handle this gracefully
+        assert response.status_code == 200  
         
-        # Test with very long invalid token
         long_invalid_token = "invalid." * 100
         response = client.get('/test', headers={
             'Authorization': f'Bearer {long_invalid_token}'
         })
-        assert response.status_code == 200  # jwt_optional should handle this gracefully
+        assert response.status_code == 200 
 
 
 class TestMiddlewareDecoratorBehavior:
@@ -342,7 +338,6 @@ class TestMiddlewareDecoratorBehavior:
             """This is a test function."""
             return {"message": "test"}
         
-        # Check that the function name and docstring are preserved
         assert test_function.__name__ == 'test_function'
         assert test_function.__doc__ == 'This is a test function.'
     
@@ -359,7 +354,6 @@ class TestMiddlewareDecoratorBehavior:
             """This is a test function."""
             return {"message": "test"}
         
-        # Check that the function name and docstring are preserved
         assert test_function.__name__ == 'test_function'
         assert test_function.__doc__ == 'This is a test function.'
     

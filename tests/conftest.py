@@ -6,7 +6,6 @@ import os
 import sys
 from unittest.mock import patch, MagicMock
 
-# Add the parent directory to the path so we can import from the main app
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
@@ -19,6 +18,7 @@ def client():
     with app.test_client() as client:
         yield client
 
+#define a sample user
 @pytest.fixture
 def sample_user():
     """Sample user data for testing."""
@@ -28,7 +28,7 @@ def sample_user():
         'name': 'Test User',
         'role': 'staff'
     }
-
+#define a valid token
 @pytest.fixture
 def valid_token(sample_user):
     """Generate a valid JWT token for testing."""
@@ -48,13 +48,14 @@ def valid_token(sample_user):
     with app.app_context():
         return jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
 
+#define an invalid token
 @pytest.fixture
 def invalid_token():
     """Return an invalid JWT token for testing."""
     return "invalid.jwt.token"
 
+#define an expired token
 @pytest.fixture
 def expired_token():
     """Return an expired JWT token for testing."""
-    # This would be a real expired token in a real scenario
-    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGVzdC11c2VyLTEyMyIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJyb2xlIjoic3RhZmYiLCJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTYwMDAwMDAwMH0.invalid_signature"
+    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidGVzdC11c2VyLTEyMyIsImVtYWlsIjoidGVzdEBleGFtGxlLmNvbSIsIm5hbWUiOiJUZXN0IFVzZXIiLCJyb2xlIjoic3RhZmYiLCJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTYwMDAwMDAwMH0.invalid_signature"
