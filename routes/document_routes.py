@@ -18,6 +18,30 @@ def sanitize_filename(filename):
     # Keep only safe chars for storage 
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
 
+def link_document_to_departments(document_id, user_id):
+    """Map document to all departments the user belongs to."""
+    try:
+        # find departments for this user
+        user_depts = supabase.table("user_departments") \
+            .select("department_id") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        if not user_depts.data:
+            return {"warning": "User not mapped to any department"}, 200
+
+        # create mappings in document_departments
+        dept_links = [
+            {"document_id": document_id, "department_id": d["department_id"]}
+            for d in user_depts.data
+        ]
+
+        supabase.table("document_departments").insert(dept_links).execute()
+        return None
+    except Exception as e:
+        return {"error": f"Failed linking document to departments: {str(e)}"}, 500
+
+
 @docs_bp.route("/upload", methods=["POST"])
 def upload_document():
     if "file" not in request.files:
@@ -44,9 +68,15 @@ def upload_document():
         .execute()
 
     if existing.data:
+        doc_id = existing.data[0]["id"]
+        # just link to departments
+        link_err = link_document_to_departments(doc_id, uploaded_by)
+        if link_err:
+            return jsonify(link_err[0]), link_err[1]
+
         return jsonify({
-            "message": "Document already exists",
-            "document_id": existing.data[0]["id"],
+            "message": "Document already exists, linked to department(s)",
+            "document_id": doc_id,
             "file_url": existing.data[0]["file_url"]
         }), 200
 
@@ -56,7 +86,6 @@ def upload_document():
     safe_title = sanitize_filename(title)[:50]  # prevent overly long names
     storage_name = f"{doc_uuid}_{safe_title}{file_ext}"
 
-    
     try:
         supabase.storage.from_("documents_bucket").upload(
             storage_name, file.read(),
@@ -82,9 +111,16 @@ def upload_document():
             "content_hash": content_hash
         }).execute()
 
+        doc_id = res.data[0]["id"]
+
+        # link to departments
+        link_err = link_document_to_departments(doc_id, uploaded_by)
+        if link_err:
+            return jsonify(link_err[0]), link_err[1]
+
         return jsonify({
             "message": "Document uploaded successfully",
-            "document_id": res.data[0]["id"],
+            "document_id": doc_id,
             "file_url": file_url
         }), 201
 
