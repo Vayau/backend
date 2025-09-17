@@ -3,3 +3,11 @@ supabase
 python-dotenv
 bcrypt
 PyJWT
+haystack-ai
+pypdf
+google-genai-haystack
+sentence-transformers 
+google-generativeai
+accelerate
+pgvector-haystack
+nltk==3.9.1

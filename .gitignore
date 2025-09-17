@@ -1,6 +1,6 @@
 venv/
 .env
-
+rag/
 # Ignore Python cache
 __pycache__/
 *.pyc
