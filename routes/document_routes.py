@@ -19,7 +19,6 @@ def sanitize_filename(filename):
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
 
 def link_document_to_departments(document_id, user_id):
-    """Map document to all departments the user belongs to."""
     try:
         # find departments for this user
         user_depts = supabase.table("user_departments") \
@@ -49,9 +48,8 @@ def upload_document():
 
     file = request.files["file"]
     title = request.form.get("title")
-    description = request.form.get("description")
     language = request.form.get("language", "english")
-    doc_type = request.form.get("type", "other")
+    doc_type = request.form.get("type")
     uploaded_by = request.form.get("uploaded_by")
     source = request.form.get("source")
 
@@ -102,7 +100,6 @@ def upload_document():
     try:
         res = supabase.table("documents").insert({
             "title": title,
-            "description": description,
             "file_url": file_url,
             "language": language,
             "type": doc_type,
