@@ -49,9 +49,17 @@ def login():
         return jsonify({"error": "Invalid email or password"}), 401
 
     user = res.data[0]
-    stored_hash = user["password"].encode("utf-8")
+    stored_password = user["password"]
 
-    if bcrypt.checkpw(password.encode("utf-8"), stored_hash):
+    if stored_password.startswith("$2b$"):
+        if bcrypt.checkpw(password.encode("utf-8"), stored_password.encode("utf-8")):
+            password_valid = True
+        else:
+            password_valid = False
+    else:
+        password_valid = (password == stored_password)
+
+    if password_valid:
         token = generate_jwt_token(user)
         
         response_data = {

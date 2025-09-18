@@ -2,6 +2,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from routes.auth_routes import auth_bp
 from utils.auth_middleware import jwt_required, jwt_optional
+from routes.document_routes import docs_bp
 import os
 from dotenv import load_dotenv
 
@@ -14,6 +15,7 @@ CORS(app, supports_credentials=True)
 
 
 app.register_blueprint(auth_bp, url_prefix="/auth")
+app.register_blueprint(docs_bp, url_prefix="/document")
 
 @app.route("/test")
 @jwt_optional
