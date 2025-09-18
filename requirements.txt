@@ -33,4 +33,9 @@ google-generativeai
 accelerate
 pgvector-haystack
 nltk==3.9.1
+
 requests
+
+
+pdfplumber
+

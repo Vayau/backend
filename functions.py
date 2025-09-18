@@ -16,6 +16,9 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.lib.pagesizes import A4
 from PyPDF2 import PdfReader
 from deep_translator import GoogleTranslator
+import spacy
+from spacy.matcher import Matcher
+import pdfplumber
 
 def convert_to_pdf(input_path: str, output_path: str) -> None:
     mime_type, _ = mimetypes.guess_type(input_path)
@@ -185,3 +188,133 @@ class PDFTranslator:
         self.write_text_to_pdf(translated, output_pdf)
         return translated
 
+class DocumentClassifier:
+    def __init__(self):
+        self.nlp = spacy.load("en_core_web_trf")
+        self.matcher = Matcher(self.nlp.vocab)
+        self._add_patterns()
+
+    def _add_patterns(self):
+        # HR Patterns
+        self.matcher.add("RECRUITMENT_ADV_NO", [[{"TEXT": {"REGEX": r"HR/\d{4}/\d+"}}]])
+        self.matcher.add("GRADE_PAY", [[{"TEXT": {"REGEX": r"Grade\s?[A-Z0-9]+"}}]])
+        self.matcher.add("JOB_TITLE", [[{"LOWER": {"IN": ["engineer", "manager", "officer", "assistant"]}}]])
+
+        # Procurement Patterns
+        self.matcher.add("TENDER_ID", [[{"TEXT": {"REGEX": r"Tender\s?No\.\s?\d+/\d+"}}]])
+        self.matcher.add("PURCHASE_ORDER_NO", [[{"TEXT": {"REGEX": r"PO\s?\d{3,}"}}]])
+        self.matcher.add("CONTRACT_ID", [[{"TEXT": {"REGEX": r"Contract\s?No\.\s?\w+"}}]])
+
+        # Legal Patterns
+        self.matcher.add("CASE_NO", [[{"TEXT": {"REGEX": r"(W\.P\.|C\.R\.|O\.S\.)\s?\d+/\d+"}}]])
+        self.matcher.add("COURT_NAME", [[{"LOWER": {"IN": ["supreme", "high", "district", "tribunal"]}}]])
+        self.matcher.add("LAW_SECTION", [[{"TEXT": {"REGEX": r"(Section|Article)\s?\d+[A-Za-z]?"}}]])
+
+    def extract_metadata(self, text):
+        doc = self.nlp(text)
+        matches = self.matcher(doc)
+
+        metadata = {
+            "general": {"PERSON": [], "ORG": [], "DATE": [], "AMOUNT": [], "LOCATION": []},
+            "HR": {"EMPLOYEE_ID": [], "JOB_TITLE": [], "GRADE_PAY": [], "RECRUITMENT_ADV_NO": []},
+            "Procurement": {"TENDER_ID": [], "PURCHASE_ORDER_NO": [], "BIDDER_NAME": [], "CONTRACT_ID": [], "ITEM_SERVICE": [], "DEADLINE": []},
+            "Legal": {"CASE_NO": [], "COURT_NAME": [], "LAW_SECTION": [], "PARTY_NAME": [], "SOP_CLAUSE": []},
+        }
+
+        for ent in doc.ents:
+            if ent.label_ in metadata["general"]:
+                metadata["general"][ent.label_].append(ent.text)
+
+        for match_id, start, end in matches:
+            label = self.nlp.vocab.strings[match_id]
+            span = doc[start:end].text
+            for dept in metadata:
+                if label in metadata[dept]:
+                    metadata[dept][label].append(span)
+
+        return metadata
+
+    def classify_department_with_confidence(self, metadata, full_text=""):
+        scores = {
+            "HR": 0.0,
+            "Procurement": 0.0,
+            "Legal": 0.0,
+            "Finance": 0.0,
+            "Engineering": 0.0,
+            "Regulatory": 0.0,
+        }
+
+        # HR
+        if metadata["HR"]["RECRUITMENT_ADV_NO"]:
+            scores["HR"] += 0.6
+        if metadata["HR"]["JOB_TITLE"]:
+            scores["HR"] += 0.4
+        if metadata["HR"]["GRADE_PAY"]:
+            scores["HR"] += 0.4
+
+        # Procurement
+        if metadata["Procurement"]["TENDER_ID"]:
+            scores["Procurement"] += 0.8
+        if metadata["Procurement"]["PURCHASE_ORDER_NO"]:
+            scores["Procurement"] += 0.7
+        if metadata["Procurement"]["CONTRACT_ID"]:
+            scores["Procurement"] += 0.7
+        if "tender" in full_text.lower() or "bid" in full_text.lower():
+            scores["Procurement"] += 0.6
+
+        # Legal
+        if metadata["Legal"]["CASE_NO"]:
+            scores["Legal"] += 0.7
+        if metadata["Legal"]["COURT_NAME"]:
+            scores["Legal"] += 0.6
+        if metadata["Legal"]["LAW_SECTION"]:
+            scores["Legal"] += 0.5
+        if metadata["Legal"]["PARTY_NAME"]:
+            scores["Legal"] += 0.4
+
+        # Finance
+        text = full_text.lower()
+        if "tax return" in text or "tax reimbursement" in text:
+            scores["Finance"] += 0.8
+        if "annual report" in text:
+            scores["Finance"] += 0.7
+        if "tax" in text:
+            scores["Finance"] += 0.4
+
+        # Regulatory
+        if "environmental impact" in text or "eia" in text:
+            scores["Regulatory"] += 0.8
+        if "safety directive" in text or "directive" in text:
+            scores["Regulatory"] += 0.6
+        if "safety" in text:
+            scores["Regulatory"] += 0.3
+
+        # Engineering
+        if "rolling stock" in text or "maximo" in text:
+            scores["Engineering"] += 0.8
+        if "engineering report" in text:
+            scores["Engineering"] += 0.5
+        elif "report" in text:
+            scores["Engineering"] += 0.1
+
+        max_score = max(scores.values())
+        if max_score > 0:
+            for dept in scores:
+                scores[dept] = round(scores[dept] / max_score, 2)
+
+        sorted_depts = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        top_2 = [dept for dept, score in sorted_depts if score > 0][:2]
+        return list(top_2)
+
+    def extract_text_from_pdf(self, pdf_path):
+        text = ""
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() or ""
+        return text
+
+    def process_pdf(self, pdf_path):
+        text = self.extract_text_from_pdf(pdf_path)
+        metadata = self.extract_metadata(text)
+        predicted = self.classify_department_with_confidence(metadata, full_text=text)
+        return metadata, predicted
