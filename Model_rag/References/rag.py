@@ -9,7 +9,7 @@ from haystack_integrations.components.generators.google_genai import GoogleGenAI
 from haystack.components.builders import ChatPromptBuilder
 from haystack_integrations.components.retrievers.pgvector import PgvectorEmbeddingRetriever
 from haystack_integrations.document_stores.pgvector import PgvectorDocumentStore
-from rag.References.vector_embeddings import HaystackEmbeddingGenerator
+from vector_embeddings import HaystackEmbeddingGenerator
 from haystack.document_stores.types import DuplicatePolicy
 from haystack.utils import Secret
 
