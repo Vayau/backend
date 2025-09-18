@@ -3,6 +3,7 @@ from utils.supabase import supabase
 
 summary_bp = Blueprint("summary", __name__)
 
+# this is the summary route to get the content 
 @summary_bp.route("/summaries", methods=["POST"])
 def get_summaries():
     data = request.json
