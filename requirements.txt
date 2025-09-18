@@ -4,6 +4,7 @@ supabase
 python-dotenv
 bcrypt
 PyJWT
+
 pytest
 
 python-magic
@@ -24,4 +25,13 @@ spacy
 #Example: python -m spacy download en_core_web_sm
 deep-translator
 PyPDF2
+haystack-ai
+pypdf
+google-genai-haystack
+sentence-transformers 
+google-generativeai
+accelerate
+pgvector-haystack
+nltk==3.9.1
+
 pdfplumber
