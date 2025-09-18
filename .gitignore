@@ -2,6 +2,7 @@ venv/
 .env
 .env.test
 
+rag/
 # Ignore Python cache
 __pycache__/
 *.pyc
