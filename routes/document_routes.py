@@ -9,8 +9,8 @@ import shutil
 from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
 from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentClassifier
+
 from Model_rag.query import summarizer
-from Model_rag.vector_helper import create_vector_embeddings
 
 docs_bp = Blueprint("documents", __name__)
 
@@ -29,12 +29,12 @@ def is_handwritten_file(file):
     """Check if the uploaded file is a handwritten document based on file type and user input"""
     # Check if user explicitly marked it as handwritten
     is_handwritten = request.form.get("is_handwritten", "false").lower() == "true"
-    
+
     if is_handwritten:
         # Verify it's an image file
         mime_type, _ = mimetypes.guess_type(file.filename)
         return mime_type and mime_type.startswith('image/')
-    
+
     return False
 
 def is_pdf_file(file):
@@ -48,11 +48,11 @@ def process_uploaded_file(file, is_handwritten=False):
         # Create temporary files
         temp_input = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1])
         temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        
+
         # Save uploaded file to temp location
         file.save(temp_input.name)
         file.seek(0)  # Reset file pointer
-        
+
         if is_handwritten:
             ocr = HandwrittenOCR()
             text = ocr.process_image(temp_input.name)
@@ -66,7 +66,7 @@ def process_uploaded_file(file, is_handwritten=False):
                 import shutil
                 shutil.copy2(temp_input.name, temp_output.name)
                 return temp_output.name, "pdf_original"
-                
+
     except Exception as e:
         try:
             os.unlink(temp_input.name)
@@ -189,10 +189,10 @@ def get_department_id_by_name(department_name):
         
         if result.data and len(result.data) > 0:
             dept_id = result.data[0]["id"]
-            print(f"[SUCCESS] Mapped '{department_name}' -> '{actual_dept_name}' -> {dept_id}")
+            print(f"✓ Mapped '{department_name}' -> '{actual_dept_name}' -> {dept_id}")
             return dept_id
         else:
-            print(f"[WARNING] Department '{department_name}' (mapped to '{actual_dept_name}') not found in database")
+            print(f"⚠ Department '{department_name}' (mapped to '{actual_dept_name}') not found in database")
             return None
     except Exception as e:
         print(f"Error getting department ID for {department_name}: {str(e)}")
@@ -237,7 +237,7 @@ def upload_document():
         return jsonify({"error": "uploaded_by and title are required"}), 400
 
     is_handwritten = is_handwritten_file(file)
-    
+ 
     try:
         processed_file_path, processing_type = process_uploaded_file(file, is_handwritten)
     except Exception as e:
@@ -246,7 +246,7 @@ def upload_document():
     # Calculate content hash for reference (but don't check for duplicates)
     with open(processed_file_path, 'rb') as f:
         content_hash = calculate_file_hash(f)
-
+    
     doc_uuid = str(uuid.uuid4())
     safe_title = sanitize_filename(title)[:50]  
     storage_name = f"{doc_uuid}_{safe_title}.pdf"
@@ -260,7 +260,7 @@ def upload_document():
     except Exception as e:
         os.unlink(processed_file_path)
         return jsonify({"error": f"Storage upload failed: {str(e)}"}), 500
-
+    
     # Process document with DocumentClassifier and generate summary using the already processed file
     classification_results, extracted_text, summary = classify_and_summarize_document(processed_file_path, title, is_existing=False)
 
@@ -283,16 +283,16 @@ def upload_document():
         }).execute()
 
         if not res.data:
-            print(f"[ERROR] Database insert failed: {res}")
+            print(f"❌ Database insert failed: {res}")
             return jsonify({"error": f"Database insert failed: {res}"}), 500
 
         doc_id = res.data[0]["id"]
-        print(f"[SUCCESS] Document inserted with ID: {doc_id}")
+        print(f"✓ Document inserted with ID: {doc_id}")
         
     except Exception as db_insert_error:
         # Check if it's a duplicate content_hash error
         if "duplicate key value violates unique constraint" in str(db_insert_error) and "content_hash" in str(db_insert_error):
-            print(f"[WARNING] Duplicate content detected, generating new content hash for duplicate upload")
+            print(f"⚠ Duplicate content detected, generating new content hash for duplicate upload")
             # Generate a new content hash with timestamp to make it unique
             import time
             unique_content_hash = f"{content_hash}_{int(time.time())}"
@@ -309,16 +309,16 @@ def upload_document():
                 }).execute()
 
                 if not res.data:
-                    print(f"[ERROR] Retry database insert failed: {res}")
+                    print(f"❌ Retry database insert failed: {res}")
                     return jsonify({"error": f"Retry database insert failed: {res}"}), 500
 
                 doc_id = res.data[0]["id"]
-                print(f"[SUCCESS] Document inserted with unique hash ID: {doc_id}")
+                print(f"✓ Document inserted with unique hash ID: {doc_id}")
             except Exception as retry_error:
-                print(f"[ERROR] Retry database insert failed: {str(retry_error)}")
+                print(f"❌ Retry database insert failed: {str(retry_error)}")
                 return jsonify({"error": f"Database insert failed after retry: {str(retry_error)}"}), 500
         else:
-            print(f"[ERROR] Database insert failed: {str(db_insert_error)}")
+            print(f"❌ Database insert failed: {str(db_insert_error)}")
             return jsonify({"error": f"Database insert failed: {str(db_insert_error)}"}), 500
 
     # Store summary in document_summaries table
@@ -334,7 +334,7 @@ def upload_document():
             primary_department_id = get_department_id_by_name(primary_department_name)
             
             if not primary_department_id:
-                print(f"[WARNING] Department '{primary_department_name}' not found in database, saving without department_id")
+                print(f"⚠ Department '{primary_department_name}' not found in database, saving without department_id")
         
         # Insert summary into document_summaries table
         summary_data = {
@@ -347,12 +347,12 @@ def upload_document():
         summary_result = supabase.table("document_summaries").insert(summary_data).execute()
         
         if summary_result.data:
-            print(f"[SUCCESS] Summary saved to document_summaries table for document {doc_id}")
+            print(f"✓ Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
             print(f"  - Summary length: {len(summary)} characters")
         else:
-            print(f"[WARNING] Failed to save summary to database: {summary_result}")
+            print(f"⚠ Failed to save summary to database: {summary_result}")
         
     except Exception as db_error:
         print(f"Failed to save summary to database: {str(db_error)}")
@@ -364,29 +364,13 @@ def upload_document():
         print(f"Linking document {doc_id} to departments for user {uploaded_by}")
         link_err = link_document_to_departments(doc_id, uploaded_by)
         if link_err:
-            print(f"[WARNING] Department linking failed: {link_err}")
+            print(f"⚠ Department linking failed: {link_err}")
             return jsonify(link_err[0]), link_err[1]
-        print(f"[SUCCESS] Document linked to departments successfully")
+        print(f"✓ Document linked to departments successfully")
     except Exception as link_error:
-        print(f"[ERROR] Error linking document to departments: {str(link_error)}")
+        print(f"❌ Error linking document to departments: {str(link_error)}")
         # Continue even if linking fails
 
-    # Create vector embeddings for RAG
-    try:
-        print(f"Creating vector embeddings for document {doc_id}")
-        if extracted_text and len(extracted_text.strip()) > 0:
-            vector_result = create_vector_embeddings(str(doc_id), extracted_text)
-            if vector_result["success"]:
-                print(f"[SUCCESS] Vector embeddings created successfully for document {doc_id}")
-            else:
-                print(f"[WARNING] Vector embedding creation failed: {vector_result['message']}")
-        else:
-            print(f"[WARNING] No extracted text available for vector embedding creation for document {doc_id}")
-    except Exception as vector_error:
-        print(f"[ERROR] Error creating vector embeddings: {str(vector_error)}")
-        # Continue even if vector embedding creation fails
-
-    # Prepare response
     try:
         # Ensure all response data is JSON serializable
         safe_classification_results = classification_results if classification_results else {}
@@ -397,109 +381,40 @@ def upload_document():
             "message": "Document uploaded and processed successfully",
             "document_id": doc_id,
             "file_url": file_url,
-            "processing_type": processing_type,
+             "processing_type": processing_type,
             "classification_results": safe_classification_results,
             "extracted_text_preview": safe_extracted_text_preview,
-            "summary": safe_summary,
-            "vector_embeddings_created": vector_result.get("success", False) if 'vector_result' in locals() else False
+            "summary": safe_summary
         }
-        print(f"[SUCCESS] Preparing response for document {doc_id}")
+        print(f"✓ Preparing response for document {doc_id}")
         print(f"  - Classification results type: {type(safe_classification_results)}")
         print(f"  - Summary length: {len(safe_summary)}")
         return jsonify(response_data), 201
+    
     except Exception as response_error:
-        print(f"[ERROR] Error preparing response: {str(response_error)}")
+        print(f"❌ Error preparing response: {str(response_error)}")
         return jsonify({"error": f"Response preparation failed: {str(response_error)}"}), 500
+    
 
-
-@docs_bp.route("/translate", methods=["POST"])
+""" @docs_bp.route("/translate", methods=["POST"])
 def translate_document():
-    """Translate a PDF document using PDFTranslator"""
+    # Translate a PDF document using PDFTranslator
+    
     try:
         data = request.get_json()
-        
+
         required_fields = ["document_id", "direction"]
         for field in required_fields:
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
-        
+
         document_id = data["document_id"]
         direction = data["direction"]  
-        
+
         if direction not in ["ml2en", "en2ml"]:
             return jsonify({"error": "Invalid direction. Use 'ml2en' or 'en2ml'"}), 400
-        
+
         doc_result = supabase.table("documents").select("file_url, title").eq("id", document_id).execute()
-        
+
         if not doc_result.data:
-            return jsonify({"error": "Document not found"}), 404
-        
-        document = doc_result.data[0]
-        file_url = document["file_url"]
-        title = document["title"]
-        
-        import requests
-        response = requests.get(file_url)
-        if response.status_code != 200:
-            return jsonify({"error": "Failed to download document"}), 500
-        
-        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        
-        temp_input.write(response.content)
-        temp_input.close()
-        
-        translator = PDFTranslator()
-        translated_text = translator.translate_pdf(temp_input.name, temp_output.name, direction)
-        
-        direction_suffix = "en" if direction == "ml2en" else "ml"
-        translated_title = f"{title}_translated_{direction_suffix}"
-        doc_uuid = str(uuid.uuid4())
-        safe_title = sanitize_filename(translated_title)[:50]
-        storage_name = f"{doc_uuid}_{safe_title}.pdf"
-        
-        with open(temp_output.name, 'rb') as f:
-            supabase.storage.from_("documents_bucket").upload(
-                storage_name, f.read(),
-                {"content-type": "application/pdf"}
-            )
-        
-        translated_file_url = supabase.storage.from_("documents_bucket").get_public_url(storage_name)
-        
-        with open(temp_output.name, 'rb') as f:
-            content_hash = calculate_file_hash(f)
-        
-        res = supabase.table("documents").insert({
-            "title": translated_title,
-            "file_url": translated_file_url,
-            "language": "english" if direction == "ml2en" else "malayalam",
-            "type": "translated",
-            "source": "translation",
-            "uploaded_by": data.get("uploaded_by", "system"),
-            "content_hash": content_hash
-        }).execute()
-        
-        translated_doc_id = res.data[0]["id"]
-        
-        os.unlink(temp_input.name)
-        os.unlink(temp_output.name)
-        
-        return jsonify({
-            "message": "Document translated successfully",
-            "original_document_id": document_id,
-            "translated_document_id": translated_doc_id,
-            "translated_file_url": translated_file_url,
-            "direction": direction,
-            "translated_text_preview": translated_text[:500] + "..." if len(translated_text) > 500 else translated_text
-        }), 200
-        
-    except Exception as e:
-        try:
-            if 'temp_input' in locals():
-                os.unlink(temp_input.name)
-            if 'temp_output' in locals():
-                os.unlink(temp_output.name)
-        except:
-            pass
-        
-        return jsonify({"error": f"Translation failed: {str(e)}"}), 500
+            return jsonify({"error": "Document not found"}), 404 """
