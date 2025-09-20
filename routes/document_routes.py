@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
 from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentClassifier
 from Model_rag.query import summarizer
+from Model_rag.vector_helper import create_vector_embeddings
 
 docs_bp = Blueprint("documents", __name__)
 
@@ -188,10 +189,10 @@ def get_department_id_by_name(department_name):
         
         if result.data and len(result.data) > 0:
             dept_id = result.data[0]["id"]
-            print(f"✓ Mapped '{department_name}' -> '{actual_dept_name}' -> {dept_id}")
+            print(f"[SUCCESS] Mapped '{department_name}' -> '{actual_dept_name}' -> {dept_id}")
             return dept_id
         else:
-            print(f"⚠ Department '{department_name}' (mapped to '{actual_dept_name}') not found in database")
+            print(f"[WARNING] Department '{department_name}' (mapped to '{actual_dept_name}') not found in database")
             return None
     except Exception as e:
         print(f"Error getting department ID for {department_name}: {str(e)}")
@@ -282,16 +283,16 @@ def upload_document():
         }).execute()
 
         if not res.data:
-            print(f"❌ Database insert failed: {res}")
+            print(f"[ERROR] Database insert failed: {res}")
             return jsonify({"error": f"Database insert failed: {res}"}), 500
 
         doc_id = res.data[0]["id"]
-        print(f"✓ Document inserted with ID: {doc_id}")
+        print(f"[SUCCESS] Document inserted with ID: {doc_id}")
         
     except Exception as db_insert_error:
         # Check if it's a duplicate content_hash error
         if "duplicate key value violates unique constraint" in str(db_insert_error) and "content_hash" in str(db_insert_error):
-            print(f"⚠ Duplicate content detected, generating new content hash for duplicate upload")
+            print(f"[WARNING] Duplicate content detected, generating new content hash for duplicate upload")
             # Generate a new content hash with timestamp to make it unique
             import time
             unique_content_hash = f"{content_hash}_{int(time.time())}"
@@ -308,16 +309,16 @@ def upload_document():
                 }).execute()
 
                 if not res.data:
-                    print(f"❌ Retry database insert failed: {res}")
+                    print(f"[ERROR] Retry database insert failed: {res}")
                     return jsonify({"error": f"Retry database insert failed: {res}"}), 500
 
                 doc_id = res.data[0]["id"]
-                print(f"✓ Document inserted with unique hash ID: {doc_id}")
+                print(f"[SUCCESS] Document inserted with unique hash ID: {doc_id}")
             except Exception as retry_error:
-                print(f"❌ Retry database insert failed: {str(retry_error)}")
+                print(f"[ERROR] Retry database insert failed: {str(retry_error)}")
                 return jsonify({"error": f"Database insert failed after retry: {str(retry_error)}"}), 500
         else:
-            print(f"❌ Database insert failed: {str(db_insert_error)}")
+            print(f"[ERROR] Database insert failed: {str(db_insert_error)}")
             return jsonify({"error": f"Database insert failed: {str(db_insert_error)}"}), 500
 
     # Store summary in document_summaries table
@@ -333,7 +334,7 @@ def upload_document():
             primary_department_id = get_department_id_by_name(primary_department_name)
             
             if not primary_department_id:
-                print(f"⚠ Department '{primary_department_name}' not found in database, saving without department_id")
+                print(f"[WARNING] Department '{primary_department_name}' not found in database, saving without department_id")
         
         # Insert summary into document_summaries table
         summary_data = {
@@ -346,12 +347,12 @@ def upload_document():
         summary_result = supabase.table("document_summaries").insert(summary_data).execute()
         
         if summary_result.data:
-            print(f"✓ Summary saved to document_summaries table for document {doc_id}")
+            print(f"[SUCCESS] Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
             print(f"  - Summary length: {len(summary)} characters")
         else:
-            print(f"⚠ Failed to save summary to database: {summary_result}")
+            print(f"[WARNING] Failed to save summary to database: {summary_result}")
         
     except Exception as db_error:
         print(f"Failed to save summary to database: {str(db_error)}")
@@ -363,12 +364,27 @@ def upload_document():
         print(f"Linking document {doc_id} to departments for user {uploaded_by}")
         link_err = link_document_to_departments(doc_id, uploaded_by)
         if link_err:
-            print(f"⚠ Department linking failed: {link_err}")
+            print(f"[WARNING] Department linking failed: {link_err}")
             return jsonify(link_err[0]), link_err[1]
-        print(f"✓ Document linked to departments successfully")
+        print(f"[SUCCESS] Document linked to departments successfully")
     except Exception as link_error:
-        print(f"❌ Error linking document to departments: {str(link_error)}")
+        print(f"[ERROR] Error linking document to departments: {str(link_error)}")
         # Continue even if linking fails
+
+    # Create vector embeddings for RAG
+    try:
+        print(f"Creating vector embeddings for document {doc_id}")
+        if extracted_text and len(extracted_text.strip()) > 0:
+            vector_result = create_vector_embeddings(str(doc_id), extracted_text)
+            if vector_result["success"]:
+                print(f"[SUCCESS] Vector embeddings created successfully for document {doc_id}")
+            else:
+                print(f"[WARNING] Vector embedding creation failed: {vector_result['message']}")
+        else:
+            print(f"[WARNING] No extracted text available for vector embedding creation for document {doc_id}")
+    except Exception as vector_error:
+        print(f"[ERROR] Error creating vector embeddings: {str(vector_error)}")
+        # Continue even if vector embedding creation fails
 
     # Prepare response
     try:
@@ -384,14 +400,15 @@ def upload_document():
             "processing_type": processing_type,
             "classification_results": safe_classification_results,
             "extracted_text_preview": safe_extracted_text_preview,
-            "summary": safe_summary
+            "summary": safe_summary,
+            "vector_embeddings_created": vector_result.get("success", False) if 'vector_result' in locals() else False
         }
-        print(f"✓ Preparing response for document {doc_id}")
+        print(f"[SUCCESS] Preparing response for document {doc_id}")
         print(f"  - Classification results type: {type(safe_classification_results)}")
         print(f"  - Summary length: {len(safe_summary)}")
         return jsonify(response_data), 201
     except Exception as response_error:
-        print(f"❌ Error preparing response: {str(response_error)}")
+        print(f"[ERROR] Error preparing response: {str(response_error)}")
         return jsonify({"error": f"Response preparation failed: {str(response_error)}"}), 500
 
 
