@@ -4,4 +4,38 @@ supabase
 python-dotenv
 bcrypt
 PyJWT
+
 pytest
+
+python-magic
+Pillow
+torch
+transformers
+opencv-python
+pytesseract
+#For pytesseract, you may need to install Tesseract OCR separately
+reportlab
+numpy
+docx2pdf
+fpdf
+pdfkit
+langdetect
+spacy
+#For spaCy language models, you may need to install them separately
+#Example: python -m spacy download en_core_web_sm
+deep-translator
+PyPDF2
+haystack-ai
+pypdf
+google-genai-haystack
+sentence-transformers 
+google-generativeai
+accelerate
+pgvector-haystack
+nltk==3.9.1
+
+requests
+
+
+pdfplumber
+
