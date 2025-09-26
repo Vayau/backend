@@ -19,6 +19,7 @@ from deep_translator import GoogleTranslator
 import spacy
 from spacy.matcher import Matcher
 import pdfplumber
+from collections import defaultdict
 
 def convert_to_pdf(input_path: str, output_path: str) -> None:
     mime_type, _ = mimetypes.guess_type(input_path)
@@ -234,87 +235,154 @@ class DocumentClassifier:
 
         return metadata
 
-    def classify_department_with_confidence(self, metadata, full_text=""):
-        scores = {
-            "HR": 0.0,
-            "Procurement": 0.0,
-            "Legal": 0.0,
-            "Finance": 0.0,
-            "Engineering": 0.0,
-            "Regulatory": 0.0,
-        }
+    def classify_department(self, metadata, full_text=""):
+        text = (full_text or "").lower()
+        raw = defaultdict(float)
+        reasons = defaultdict(list)
+
+        # Procurement logic
+        proc_matches = (
+            len(metadata["Procurement"]["TENDER_ID"])
+            + len(metadata["Procurement"]["PURCHASE_ORDER_NO"])
+            + len(metadata["Procurement"]["CONTRACT_ID"])
+        )
+        procurement_phrases = [
+            "tender document", "notice inviting tender", "form of tender",
+            "bill of quantities", "tender security", "tenderer", "earnest money",
+            "emd", "bid", "bidder", "purchase order", "contract no",
+            "evaluation of tender", "tender opening", "tender validity"
+        ]
+        proc_kw_hits = sum(1 for kw in procurement_phrases if kw in text)
+
+        if proc_matches:
+            raw["Procurement"] += proc_matches * 3.0
+            reasons["Procurement"].append(f"explicit_proc_matches={proc_matches}")
+        if proc_kw_hits:
+            raw["Procurement"] += proc_kw_hits * 1.2
+            reasons["Procurement"].append(f"procurement_phrase_hits={proc_kw_hits}")
+        if any(k in text for k in ["notice inviting tender", "form of tender", "bill of quantities"]):
+            raw["Procurement"] += 3.0
+            reasons["Procurement"].append("strong_proc_indicator_phrase")
 
         # HR
         if metadata["HR"]["RECRUITMENT_ADV_NO"]:
-            scores["HR"] += 0.6
+            raw["HR"] += 3.0
+            reasons["HR"].append("RECRUITMENT_ADV_NO")
         if metadata["HR"]["JOB_TITLE"]:
-            scores["HR"] += 0.4
+            raw["HR"] += len(metadata["HR"]["JOB_TITLE"]) * 1.0
+            reasons["HR"].append("JOB_TITLE_found")
         if metadata["HR"]["GRADE_PAY"]:
-            scores["HR"] += 0.4
-
-        # Procurement
-        if metadata["Procurement"]["TENDER_ID"]:
-            scores["Procurement"] += 0.8
-        if metadata["Procurement"]["PURCHASE_ORDER_NO"]:
-            scores["Procurement"] += 0.7
-        if metadata["Procurement"]["CONTRACT_ID"]:
-            scores["Procurement"] += 0.7
-        if "tender" in full_text.lower() or "bid" in full_text.lower():
-            scores["Procurement"] += 0.6
+            raw["HR"] += 1.0
+            reasons["HR"].append("GRADE_PAY_found")
 
         # Legal
         if metadata["Legal"]["CASE_NO"]:
-            scores["Legal"] += 0.7
+            raw["Legal"] += len(metadata["Legal"]["CASE_NO"]) * 3.0
+            reasons["Legal"].append("CASE_NO_found")
         if metadata["Legal"]["COURT_NAME"]:
-            scores["Legal"] += 0.6
+            raw["Legal"] += len(metadata["Legal"]["COURT_NAME"]) * 0.8
+            reasons["Legal"].append("COURT_NAME_found")
         if metadata["Legal"]["LAW_SECTION"]:
-            scores["Legal"] += 0.5
-        if metadata["Legal"]["PARTY_NAME"]:
-            scores["Legal"] += 0.4
+            raw["Legal"] += len(metadata["Legal"]["LAW_SECTION"]) * 0.6
+            reasons["Legal"].append("LAW_SECTION_found")
+
+        legal_phrases = ["petitioner", "respondent", "writ petition", "tribunal order", "appeal", "arbitration clause"]
+        legal_phrase_hits = sum(1 for k in legal_phrases if k in text)
+        if legal_phrase_hits:
+            raw["Legal"] += legal_phrase_hits * 0.8
+            reasons["Legal"].append(f"legal_phrase_hits={legal_phrase_hits}")
 
         # Finance
-        text = full_text.lower()
-        if "tax return" in text or "tax reimbursement" in text:
-            scores["Finance"] += 0.8
-        if "annual report" in text:
-            scores["Finance"] += 0.7
-        if "tax" in text:
-            scores["Finance"] += 0.4
+        if "tax reimbursement" in text or "tax return" in text or "tax refund" in text:
+            raw["Finance"] += 3.0
+            reasons["Finance"].append("tax_term_found")
+        if "annual report" in text or "balance sheet" in text or "audited" in text:
+            raw["Finance"] += 2.0
+            reasons["Finance"].append("financial_statement_found")
+        if "invoice" in text:
+            raw["Finance"] += 1.5
+            reasons["Finance"].append("invoice_found")
+        if "profit and loss" in text or "p&l account" in text:
+            raw["Finance"] += 2.0
+            reasons["Finance"].append("p&l_found")
+        if "budget estimate" in text or "expenditure report" in text:
+            raw["Finance"] += 1.5
+            reasons["Finance"].append("budget_terms_found")
 
         # Regulatory
-        if "environmental impact" in text or "eia" in text:
-            scores["Regulatory"] += 0.8
-        if "safety directive" in text or "directive" in text:
-            scores["Regulatory"] += 0.6
-        if "safety" in text:
-            scores["Regulatory"] += 0.3
+        if "eia" in text or "environmental impact" in text or "environmental clearance" in text:
+            raw["Regulatory"] += 3.0
+            reasons["Regulatory"].append("environmental_found")
+        if "safety directive" in text or "safety norms" in text:
+            raw["Regulatory"] += 1.5
+            reasons["Regulatory"].append("safety_directive_found")
+        if "compliance order" in text or "regulatory directive" in text:
+            raw["Regulatory"] += 2.0
+            reasons["Regulatory"].append("regulatory_directive_found")
 
         # Engineering
         if "rolling stock" in text or "maximo" in text:
-            scores["Engineering"] += 0.8
-        if "engineering report" in text:
-            scores["Engineering"] += 0.5
-        elif "report" in text:
-            scores["Engineering"] += 0.1
+            raw["Engineering"] += 3.0
+            reasons["Engineering"].append("rolling_stock_or_maximo")
+        if "technical specification" in text or "engineering report" in text:
+            raw["Engineering"] += 1.5
+            reasons["Engineering"].append("technical_terms_found")
 
-        max_score = max(scores.values())
-        if max_score > 0:
-            for dept in scores:
-                scores[dept] = round(scores[dept] / max_score, 2)
+        # Dominance/Suppression
+        if raw["Procurement"] >= 3.0:
+            raw["Procurement"] += 3.0
+            reasons["Procurement"].append("procurement_strong_flag")
+            for dept in ["Legal", "Finance", "Regulatory", "Engineering", "HR"]:
+                if raw[dept] < 3.0:
+                    raw[dept] *= 0.35
+                    reasons[dept].append("suppressed_by_procurement")
 
-        sorted_depts = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        top_2 = [dept for dept, score in sorted_depts if score > 0][:2]
-        return list(top_2)
+        if raw["Finance"] >= 3.0:
+            raw["Finance"] += 3.0
+            reasons["Finance"].append("finance_strong_flag")
+            for dept in ["Legal", "Procurement", "Regulatory", "Engineering", "HR"]:
+                if raw[dept] < 3.0:
+                    raw[dept] *= 0.35
+                    reasons[dept].append("suppressed_by_finance")
+
+        if raw["Legal"] >= 3.0:
+            raw["Legal"] += 3.0
+            reasons["Legal"].append("legal_strong_flag")
+            for dept in ["Finance", "Procurement", "Regulatory", "Engineering", "HR"]:
+                if raw[dept] < 3.0:
+                    raw[dept] *= 0.35
+                    reasons[dept].append("suppressed_by_legal")
+
+        # Normalize scores
+        max_raw = max(raw.values()) if raw else 1.0
+        normalized = {dept: round(val / max_raw, 2) for dept, val in raw.items()}
+
+        # Departments above threshold
+        predicted_departments = [dept for dept, score in normalized.items() if score >= 0.5]
+
+        # Print details (stays in functions.py)
+        print("\nScores:")
+        for dept, score in normalized.items():
+            print(f"  {dept}: {score}")
+        print("\nReasons:")
+        for dept, rlist in reasons.items():
+            if rlist:
+                print(f"  {dept}: {rlist}")
+        print("\nPredicted Departments:", predicted_departments)
+
+        return predicted_departments
 
     def extract_text_from_pdf(self, pdf_path):
         text = ""
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                text += page.extract_text() or ""
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
         return text
 
     def process_pdf(self, pdf_path):
         text = self.extract_text_from_pdf(pdf_path)
         metadata = self.extract_metadata(text)
-        predicted = self.classify_department_with_confidence(metadata, full_text=text)
-        return metadata, predicted
+        predicted = self.classify_department(metadata, full_text=text)
+        return predicted
