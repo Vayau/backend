@@ -7,13 +7,23 @@ import os
 from routes.document_summary import summary_bp
 from routes.rag_routes import rag_bp
 from dotenv import load_dotenv
-
+from flask_mail import Mail
 load_dotenv()
 
 app = Flask(__name__)
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'secret-key')
 
 CORS(app, supports_credentials=True)
+
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = "snehajain11105@gmail.com"
+app.config['MAIL_PASSWORD'] = "gywynzlhvvvnueba"
+app.config['MAIL_DEFAULT_SENDER'] = "snehajain11105@gmail.com"
+
+
+mail = Mail(app)
 
 
 app.register_blueprint(auth_bp, url_prefix="/auth")
