@@ -81,7 +81,27 @@ def ask_question(question: str):
     })
     
     answer = result["llm"]["replies"][0]._content
-    return answer
+    
+    # Handle case where answer might be a list or TextContent object
+    if isinstance(answer, list):
+        # Extract text from TextContent objects in the list
+        text_parts = []
+        for item in answer:
+            if hasattr(item, 'text'):
+                text_parts.append(item.text)
+            else:
+                text_parts.append(str(item))
+        answer = " ".join(text_parts)
+    elif hasattr(answer, 'text'):
+        answer = answer.text
+    elif isinstance(answer, str) and "TextContent(text=" in answer:
+        # Extract content from TextContent string representation
+        import re
+        match = re.search(r"TextContent\(text='(.*?)'\)", answer)
+        if match:
+            answer = match.group(1)
+    
+    return str(answer)
 
 # This block allows you to run this file directly as a script for testing
 if __name__ == "__main__":

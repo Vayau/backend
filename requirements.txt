@@ -22,7 +22,7 @@ pdfkit
 langdetect
 spacy
 #For spaCy language models, you may need to install them separately
-#Example: python -m spacy download en_core_web_sm
+#Example: python -m spacy download en_core_web_trf
 deep-translator
 PyPDF2
 haystack-ai
@@ -34,4 +34,8 @@ accelerate
 pgvector-haystack
 nltk==3.9.1
 
+requests
+
+
 pdfplumber
+
