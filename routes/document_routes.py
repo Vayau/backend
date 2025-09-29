@@ -12,6 +12,7 @@ from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentCla
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from pdf2image import convert_from_path
 import torch
+
 from Model_rag.query import summarizer
 
 docs_bp = Blueprint("documents", __name__)
@@ -28,6 +29,7 @@ def sanitize_filename(filename):
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
 
 def is_handwritten_file(file):
+
     processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
     model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
     images = convert_from_path(file, dpi=200)
@@ -57,6 +59,7 @@ def process_uploaded_file(file, is_handwritten=False):
         if is_handwritten:
             ocr = HandwrittenOCR()
             text = ocr.process_pdf(temp_input.name)
+
             ocr.save_to_pdf(text, temp_output.name)
             return temp_output.name, "handwritten_ocr"
         else:
@@ -284,16 +287,19 @@ def upload_document():
         }).execute()
 
         if not res.data:
-            print(f"❌ Database insert failed: {res}")
+
+            print(f"Database insert failed: {res}")
             return jsonify({"error": f"Database insert failed: {res}"}), 500
 
         doc_id = res.data[0]["id"]
-        print(f"✓ Document inserted with ID: {doc_id}")
+        print(f"Document inserted with ID: {doc_id}")
         
     except Exception as db_insert_error:
         # Check if it's a duplicate content_hash error
         if "duplicate key value violates unique constraint" in str(db_insert_error) and "content_hash" in str(db_insert_error):
-            print(f"⚠ Duplicate content detected, generating new content hash for duplicate upload")
+
+            print(f"Duplicate content detected, generating new content hash for duplicate upload")
+
             # Generate a new content hash with timestamp to make it unique
             import time
             unique_content_hash = f"{content_hash}_{int(time.time())}"
@@ -310,16 +316,17 @@ def upload_document():
                 }).execute()
 
                 if not res.data:
-                    print(f"❌ Retry database insert failed: {res}")
+
+                    print(f"Retry database insert failed: {res}")
                     return jsonify({"error": f"Retry database insert failed: {res}"}), 500
 
                 doc_id = res.data[0]["id"]
-                print(f"✓ Document inserted with unique hash ID: {doc_id}")
+                print(f"Document inserted with unique hash ID: {doc_id}")
             except Exception as retry_error:
-                print(f"❌ Retry database insert failed: {str(retry_error)}")
+                print(f"Retry database insert failed: {str(retry_error)}")
                 return jsonify({"error": f"Database insert failed after retry: {str(retry_error)}"}), 500
         else:
-            print(f"❌ Database insert failed: {str(db_insert_error)}")
+            print(f"Database insert failed: {str(db_insert_error)}")
             return jsonify({"error": f"Database insert failed: {str(db_insert_error)}"}), 500
 
     # Store summary in document_summaries table
@@ -335,7 +342,9 @@ def upload_document():
             primary_department_id = get_department_id_by_name(primary_department_name)
             
             if not primary_department_id:
-                print(f"⚠ Department '{primary_department_name}' not found in database, saving without department_id")
+
+                print(f"Department '{primary_department_name}' not found in database, saving without department_id")
+
         
         # Insert summary into document_summaries table
         summary_data = {
@@ -348,7 +357,8 @@ def upload_document():
         summary_result = supabase.table("document_summaries").insert(summary_data).execute()
         
         if summary_result.data:
-            print(f"✓ Summary saved to document_summaries table for document {doc_id}")
+
+            print(f"Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
             print(f"  - Summary length: {len(summary)} characters")
@@ -367,9 +377,9 @@ def upload_document():
         if link_err:
             print(f"⚠ Department linking failed: {link_err}")
             return jsonify(link_err[0]), link_err[1]
-        print(f"✓ Document linked to departments successfully")
+        print(f"Document linked to departments successfully")
     except Exception as link_error:
-        print(f"❌ Error linking document to departments: {str(link_error)}")
+        print(f"Error linking document to departments: {str(link_error)}")
         # Continue even if linking fails
 
     try:
@@ -387,35 +397,17 @@ def upload_document():
             "extracted_text_preview": safe_extracted_text_preview,
             "summary": safe_summary
         }
-        print(f"✓ Preparing response for document {doc_id}")
+
+        print(f"Preparing response for document {doc_id}")
+
         print(f"  - Classification results type: {type(safe_classification_results)}")
         print(f"  - Summary length: {len(safe_summary)}")
         return jsonify(response_data), 201
     
     except Exception as response_error:
-        print(f"❌ Error preparing response: {str(response_error)}")
+
+        print(f"Error preparing response: {str(response_error)}")
         return jsonify({"error": f"Response preparation failed: {str(response_error)}"}), 500
     
 
-""" @docs_bp.route("/translate", methods=["POST"])
-def translate_document():
-    # Translate a PDF document using PDFTranslator
-    
-    try:
-        data = request.get_json()
 
-        required_fields = ["document_id", "direction"]
-        for field in required_fields:
-            if field not in data:
-                return jsonify({"error": f"Missing required field: {field}"}), 400
-
-        document_id = data["document_id"]
-        direction = data["direction"]  
-
-        if direction not in ["ml2en", "en2ml"]:
-            return jsonify({"error": "Invalid direction. Use 'ml2en' or 'en2ml'"}), 400
-
-        doc_result = supabase.table("documents").select("file_url, title").eq("id", document_id).execute()
-
-        if not doc_result.data:
-            return jsonify({"error": "Document not found"}), 404 """
