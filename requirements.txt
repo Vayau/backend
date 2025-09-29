@@ -34,3 +34,4 @@ nltk==3.9.1
 requests
 pdf2image
 pdfplumber
+flask_mail
