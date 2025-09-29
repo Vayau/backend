@@ -8,7 +8,10 @@ import requests
 import shutil
 from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
-from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentClassifier
+from functions import convert_to_pdf, HandwrittenOCR, DocumentClassifier
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+from pdf2image import convert_from_path
+import torch
 
 from Model_rag.query import summarizer
 
@@ -26,15 +29,15 @@ def sanitize_filename(filename):
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
 
 def is_handwritten_file(file):
-    """Check if the uploaded file is a handwritten document based on file type and user input"""
-    # Check if user explicitly marked it as handwritten
-    is_handwritten = request.form.get("is_handwritten", "false").lower() == "true"
 
-    if is_handwritten:
-        # Verify it's an image file
-        mime_type, _ = mimetypes.guess_type(file.filename)
-        return mime_type and mime_type.startswith('image/')
-
+    # processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+    # model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    # images = convert_from_path(file, dpi=200)
+    # img = images[0].convert("RGB")
+    # inputs = processor(img, return_tensors="pt")
+    # with torch.no_grad():
+    #     outputs = model(**inputs)
+    #     predicted_class = outputs.logits.argmax(-1).item()
     return False
 
 def is_pdf_file(file):
@@ -55,7 +58,8 @@ def process_uploaded_file(file, is_handwritten=False):
 
         if is_handwritten:
             ocr = HandwrittenOCR()
-            text = ocr.process_image(temp_input.name)
+            text = ocr.process_pdf(temp_input.name)
+
             ocr.save_to_pdf(text, temp_output.name)
             return temp_output.name, "handwritten_ocr"
         else:
@@ -229,15 +233,14 @@ def upload_document():
     file = request.files["file"]
     title = request.form.get("title")
     language = request.form.get("language", "english")
-    doc_type = request.form.get("type")
+    doc_type = request.form.get("type", "document")  # Default to "document" if not provided
     uploaded_by = request.form.get("uploaded_by")
-    source = request.form.get("source")
+    source = request.form.get("source", "upload")  # Default to "upload" if not provided
 
     if not uploaded_by or not title:
         return jsonify({"error": "uploaded_by and title are required"}), 400
 
-    is_handwritten = is_handwritten_file(file)
-
+    is_handwritten = False
  
     try:
         processed_file_path, processing_type = process_uploaded_file(file, is_handwritten)
@@ -284,6 +287,7 @@ def upload_document():
         }).execute()
 
         if not res.data:
+
             print(f"Database insert failed: {res}")
             return jsonify({"error": f"Database insert failed: {res}"}), 500
 
@@ -293,7 +297,9 @@ def upload_document():
     except Exception as db_insert_error:
         # Check if it's a duplicate content_hash error
         if "duplicate key value violates unique constraint" in str(db_insert_error) and "content_hash" in str(db_insert_error):
+
             print(f"Duplicate content detected, generating new content hash for duplicate upload")
+
             # Generate a new content hash with timestamp to make it unique
             import time
             unique_content_hash = f"{content_hash}_{int(time.time())}"
@@ -310,6 +316,7 @@ def upload_document():
                 }).execute()
 
                 if not res.data:
+
                     print(f"Retry database insert failed: {res}")
                     return jsonify({"error": f"Retry database insert failed: {res}"}), 500
 
@@ -335,25 +342,32 @@ def upload_document():
             primary_department_id = get_department_id_by_name(primary_department_name)
             
             if not primary_department_id:
+
                 print(f"Department '{primary_department_name}' not found in database, saving without department_id")
+
         
-        # Insert summary into document_summaries table
-        summary_data = {
-            "document_id": doc_id,
-            "summary_text": summary,
-            "department_id": primary_department_id
-        }
+        # Insert summary into document_summaries table (only if summary is not None)
+        if summary and summary.strip():
+            summary_data = {
+                "document_id": doc_id,
+                "summary_text": summary,
+                "department_id": primary_department_id
+            }
+            
+            # Insert into database
+            summary_result = supabase.table("document_summaries").insert(summary_data).execute()
+        else:
+            print(f"No valid summary available for document {doc_id}, skipping summary save")
+            summary_result = None
         
-        # Insert into database
-        summary_result = supabase.table("document_summaries").insert(summary_data).execute()
-        
-        if summary_result.data:
+        if summary_result and summary_result.data:
             print(f"Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
             print(f"  - Summary length: {len(summary)} characters")
-        else:
+        elif summary_result:
             print(f"⚠ Failed to save summary to database: {summary_result}")
+        # If summary_result is None, it means no summary was available, which is already logged above
         
     except Exception as db_error:
         print(f"Failed to save summary to database: {str(db_error)}")
@@ -387,14 +401,17 @@ def upload_document():
             "extracted_text_preview": safe_extracted_text_preview,
             "summary": safe_summary
         }
+
         print(f"Preparing response for document {doc_id}")
+
         print(f"  - Classification results type: {type(safe_classification_results)}")
         print(f"  - Summary length: {len(safe_summary)}")
         return jsonify(response_data), 201
     
     except Exception as response_error:
+
         print(f"Error preparing response: {str(response_error)}")
         return jsonify({"error": f"Response preparation failed: {str(response_error)}"}), 500
     
 
- 
+
