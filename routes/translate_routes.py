@@ -100,30 +100,14 @@ def translate_document():
         
         translated_doc_id = res.data[0]["id"]
         
-        # Save translated text to a text file for easy checking
-        text_filename = f"{doc_uuid}_{safe_title}.txt"
-        with open(text_filename, 'w', encoding='utf-8') as text_file:
-            text_file.write(translated_text)
-        
-        # Upload the text file to storage as well
-        with open(text_filename, 'rb') as f:
-            supabase.storage.from_("documents_bucket").upload(
-                text_filename, f.read(),
-                {"content-type": "text/plain; charset=utf-8"}
-            )
-        
-        text_file_url = supabase.storage.from_("documents_bucket").get_public_url(text_filename)
-        
         # Clean up temporary files
         os.unlink(temp_input.name)
         os.unlink(temp_output.name)
-        os.unlink(text_filename)  # Clean up local text file
         
         return jsonify({
             "message": "Document translated successfully",
             "translated_document_id": translated_doc_id,
             "translated_file_url": translated_file_url,
-            "translated_text_url": text_file_url,
             "direction": direction,
             "translated_text_preview": translated_text[:500] + "..." if len(translated_text) > 500 else translated_text
         }), 200
@@ -135,8 +119,6 @@ def translate_document():
                 os.unlink(temp_input.name)
             if 'temp_output' in locals() and os.path.exists(temp_output.name):
                 os.unlink(temp_output.name)
-            if 'text_filename' in locals() and os.path.exists(text_filename):
-                os.unlink(text_filename)
         except:
             pass
         
