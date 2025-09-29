@@ -4,9 +4,7 @@ supabase
 python-dotenv
 bcrypt
 PyJWT
-
 pytest
-
 python-magic
 Pillow
 torch
@@ -33,5 +31,11 @@ google-generativeai
 accelerate
 pgvector-haystack
 nltk==3.9.1
+<<<<<<< Updated upstream
 
+=======
+requests
+torch
+pdf2image
+>>>>>>> Stashed changes
 pdfplumber
