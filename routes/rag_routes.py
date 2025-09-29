@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from utils.auth_middleware import jwt_optional
-from Model_rag.query import ask_question, summarizer
+from Model_rag.query import ask_question_with_router, summarizer
 import uuid
 
 rag_bp = Blueprint("rag", __name__)
@@ -31,7 +31,7 @@ def ask_rag_question():
             return jsonify({"error": "Question must be less than 1000 characters"}), 400
         
         # Get the answer from RAG system
-        answer = ask_question(question)
+        answer = ask_question_with_router(question)
         
         if not answer:
             return jsonify({"error": "Failed to generate answer"}), 500
