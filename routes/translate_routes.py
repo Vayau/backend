@@ -6,6 +6,7 @@ import re
 from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
 from functions import PDFTranslator
+from deep_translator import GoogleTranslator
 
 translate_bp = Blueprint("translate", __name__)
 
@@ -35,16 +36,13 @@ def translate_document():
             return jsonify({"error": "No file provided"}), 400
         
         file = request.files["file"]
-        direction = request.form.get("direction")
+        direction = request.form.get("direction", "en2ml")  # Default to en2ml if not provided
         uploaded_by = request.form.get("uploaded_by")
         title = request.form.get("title", "Translated Document")
         
-        if not direction:
-            return jsonify({"error": "Direction is required (ml2en or en2ml)"}), 400
-        
         if direction not in ["ml2en", "en2ml"]:
             return jsonify({"error": "Invalid direction. Use 'ml2en' or 'en2ml'"}), 400
-        
+            
         if not uploaded_by:
             return jsonify({"error": "uploaded_by is required"}), 400
         
@@ -123,3 +121,48 @@ def translate_document():
             pass
         
         return jsonify({"error": f"Translation failed: {str(e)}"}), 500
+
+@translate_bp.route("/translate-summary", methods=["POST"])
+def translate_summary():
+    """Translate English text to Malayalam using Google Translate"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "Request body is required"}), 400
+        
+        text = data.get("text")
+        if not text or not text.strip():
+            return jsonify({"error": "Text is required and cannot be empty"}), 400
+        
+        # Clean and validate the text
+        text = text.strip()
+        if len(text) < 1:
+            return jsonify({"error": "Text must be at least 1 character long"}), 400
+        
+        if len(text) > 5000:
+            return jsonify({"error": "Text must be less than 5000 characters"}), 400
+        
+        # Translate using Google Translate
+        try:
+            translator = GoogleTranslator(source='en', target='ml')
+            translated_text = translator.translate(text)
+            
+            if not translated_text:
+                return jsonify({"error": "Translation failed - no result returned"}), 500
+            
+            return jsonify({
+                "message": "Text translated successfully",
+                "original_text": text,
+                "translated_text": translated_text,
+                "source_language": "en",
+                "target_language": "ml"
+            }), 200
+            
+        except Exception as translate_error:
+            print(f"Translation error: {str(translate_error)}")
+            return jsonify({"error": f"Translation failed: {str(translate_error)}"}), 500
+        
+    except Exception as e:
+        print(f"Error in translate_summary: {str(e)}")
+        return jsonify({"error": f"Failed to process translation request: {str(e)}"}), 500
