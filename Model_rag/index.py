@@ -9,6 +9,52 @@ from haystack.components.preprocessors import DocumentSplitter
 from haystack.components.embedders import SentenceTransformersDocumentEmbedder
 from haystack_integrations.document_stores.pgvector import PgvectorDocumentStore
 from haystack.utils import Secret
+from neo4j import GraphDatabase
+load_dotenv()
+
+def insert_into_graph(metadata: dict):
+    NEO4J_URI = os.getenv("NEO4J_URI")
+    NEO4J_USER = os.getenv("NEO4J_USER")
+    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+    neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+
+    query = """
+    MERGE (d:Document {doc_id:$doc_id})
+    SET d.title=$title, d.doc_type=$doc_type, d.source_system=$source_system,
+        d.date=$date, d.version=$version, d.language=$language
+
+    MERGE (p:Person {person_id:$person_id})
+    SET p.name=$person_name, p.role=$person_role
+    MERGE (d)-[:AUTHORED_BY]->(p)
+
+    MERGE (dep:Department {dept_id:$dept_id})
+    SET dep.name=$dept_name
+    MERGE (d)-[:BELONGS_TO]->(dep)
+
+    FOREACH (_ IN CASE WHEN $directive_id IS NULL THEN [] ELSE [1] END |
+        MERGE (dir:Directive {directive_id:$directive_id})
+        SET dir.issued_by=$directive_issued_by, dir.date=$directive_date
+        MERGE (d)-[:MANDATED_BY]->(dir)
+    )
+
+    FOREACH (_ IN CASE WHEN $incident_id IS NULL THEN [] ELSE [1] END |
+        MERGE (i:Incident {incident_id:$incident_id})
+        SET i.date=$incident_date, i.summary=$incident_summary
+        MERGE (d)-[:REFERENCES]->(i)
+    )
+
+    FOREACH (_ IN CASE WHEN $equipment_id IS NULL THEN [] ELSE [1] END |
+        MERGE (e:Equipment {equipment_id:$equipment_id})
+        SET e.name=$equipment_name, e.system=$equipment_system
+        MERGE (d)-[:REFERENCES]->(e)
+    )
+    RETURN d
+    """
+
+    with neo4j_driver.session(database="neo4j") as session:
+        res = session.run(query, **metadata)
+        print("✅ Inserted document:", metadata["doc_id"], res.data())
+
 
 def index_document(parent_doc_id: str, document_content: str):
     """
@@ -33,9 +79,8 @@ def index_document(parent_doc_id: str, document_content: str):
     
     # --- 2. CREATE AND RUN THE INDEXING PIPELINE ---
 
-    # The splitter will automatically create chunks and preserve the metadata.
     parent_document = Document(
-        id=parent_doc_id, # Set the ID here
+        id=parent_doc_id, 
         content=document_content,
     )
 
@@ -46,7 +91,6 @@ def index_document(parent_doc_id: str, document_content: str):
     indexing_pipeline.connect("splitter.documents", "embedder.documents")
     indexing_pipeline.connect("embedder.documents", "writer.documents")
 
-    # Run the pipeline to chunk, embed, and write the document
     indexing_pipeline.run({"splitter": {"documents": [parent_document]}})
     print(f"Indexing complete for document {parent_doc_id}.")
 
@@ -62,3 +106,43 @@ if __name__ == "__main__":
     """
     
     index_document(parent_doc_id=PARENT_DOC_ID, document_content=full_document_content)
+
+
+#     documents = [
+#     Document(
+#         content="Company: Kochi Metro Rail Ltd (KMRL) Document ID: KMRL-O&M-OPT-SOP-068 SOP Number: 15 Revision: 05 Title: SOP for Resumption of revenue service post lock down period Date: 01.09.2020 ",
+#         meta={
+#             "doc_id": "70c10cdc-624a-490f-96da-0b190d082893",
+#             "title": "SOP for Resumption of Revenue Service Post Lockdown",
+#             "doc_type": "SOP",
+#             "source_system": "SharePoint",
+#             "date": "2020-09-01",
+#             "version": "Revision 05",
+#             "language": "English",
+
+#             "person_id": "EMP-UNKNOWN",
+#             "person_name": "KMRL O&M Dept",
+#             "person_role": "Operations",
+
+#             # Department
+#             "dept_id": "OPS-01",
+#             "dept_name": "Operations",
+
+#             "directive_id": None,
+#             "directive_issued_by": None,
+#             "directive_date": None,
+
+
+#             "incident_id": None,
+#             "incident_date": None,
+#             "incident_summary": None,
+
+#             # Equipment (not in doc)
+#             "equipment_id": None,
+#             "equipment_name": None,
+#             "equipment_system": None
+#         }
+#     )
+# ]
+#     for doc in documents:
+#         insert_into_graph(doc.meta)
