@@ -35,3 +35,4 @@ neo4j
 requests
 pdf2image
 pdfplumber
+flask_mail
