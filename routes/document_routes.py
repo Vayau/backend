@@ -30,15 +30,15 @@ def sanitize_filename(filename):
 
 def is_handwritten_file(file):
 
-    processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
-    model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
-    images = convert_from_path(file, dpi=200)
-    img = images[0].convert("RGB")
-    inputs = processor(img, return_tensors="pt")
-    with torch.no_grad():
-        outputs = model(**inputs)
-        predicted_class = outputs.logits.argmax(-1).item()
-    return predicted_class == 1
+    # processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+    # model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    # images = convert_from_path(file, dpi=200)
+    # img = images[0].convert("RGB")
+    # inputs = processor(img, return_tensors="pt")
+    # with torch.no_grad():
+    #     outputs = model(**inputs)
+    #     predicted_class = outputs.logits.argmax(-1).item()
+    return False
 
 def is_pdf_file(file):
     """Check if the file is already a PDF"""
@@ -233,14 +233,14 @@ def upload_document():
     file = request.files["file"]
     title = request.form.get("title")
     language = request.form.get("language", "english")
-    doc_type = request.form.get("type")
+    doc_type = request.form.get("type", "document")  # Default to "document" if not provided
     uploaded_by = request.form.get("uploaded_by")
-    source = request.form.get("source")
+    source = request.form.get("source", "upload")  # Default to "upload" if not provided
 
     if not uploaded_by or not title:
         return jsonify({"error": "uploaded_by and title are required"}), 400
 
-    is_handwritten = is_handwritten_file(file)
+    is_handwritten = False
  
     try:
         processed_file_path, processing_type = process_uploaded_file(file, is_handwritten)
@@ -346,24 +346,28 @@ def upload_document():
                 print(f"Department '{primary_department_name}' not found in database, saving without department_id")
 
         
-        # Insert summary into document_summaries table
-        summary_data = {
-            "document_id": doc_id,
-            "summary_text": summary,
-            "department_id": primary_department_id
-        }
+        # Insert summary into document_summaries table (only if summary is not None)
+        if summary and summary.strip():
+            summary_data = {
+                "document_id": doc_id,
+                "summary_text": summary,
+                "department_id": primary_department_id
+            }
+            
+            # Insert into database
+            summary_result = supabase.table("document_summaries").insert(summary_data).execute()
+        else:
+            print(f"No valid summary available for document {doc_id}, skipping summary save")
+            summary_result = None
         
-        # Insert into database
-        summary_result = supabase.table("document_summaries").insert(summary_data).execute()
-        
-        if summary_result.data:
-
+        if summary_result and summary_result.data:
             print(f"Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
             print(f"  - Summary length: {len(summary)} characters")
-        else:
+        elif summary_result:
             print(f"⚠ Failed to save summary to database: {summary_result}")
+        # If summary_result is None, it means no summary was available, which is already logged above
         
     except Exception as db_error:
         print(f"Failed to save summary to database: {str(db_error)}")

@@ -430,4 +430,4 @@ class DocumentClassifier:
         text = self.extract_text_from_pdf(pdf_path)
         metadata = self.extract_metadata(text)
         predicted = self.classify_department(metadata, full_text=text)
-        return predicted
+        return metadata, predicted
