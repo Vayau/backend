@@ -18,7 +18,7 @@ api_key = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=api_key)
 
 NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USER = os.getenv("NEO4J_USER")
+NEO4J_USER = os.getenv("NEO4J_USERNAME")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
