@@ -20,6 +20,8 @@ import spacy
 from spacy.matcher import Matcher
 import pdfplumber
 from collections import defaultdict
+import torch
+from pdf2image import convert_from_path
 
 def convert_to_pdf(input_path: str, output_path: str) -> None:
     mime_type, _ = mimetypes.guess_type(input_path)
@@ -79,21 +81,27 @@ class HandwrittenOCR:
     def _contains_malayalam(self, text):
         return bool(re.search(r'[\u0D00-\u0D7F]', text))
 
-    def process_image(self, image_path: str) -> str:
-        image = cv2.imread(image_path)
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(image_rgb)
+    def process_pdf(self, pdf_path: str) -> str:
+        images = convert_from_path(pdf_path, dpi=200)
+        full_text = []
 
-        text_en = self._recognize_english(pil_img).strip()
-        text_ml = self._recognize_malayalam(pil_img).strip()
+        for page_num, pil_img in enumerate(images, start=1):
+            pil_img = pil_img.convert("RGB")
 
-        if text_ml and self._contains_malayalam(text_ml):
-            return text_ml
-        elif text_en:
-            return text_en
-        else:
-            return text_en if len(text_en) >= len(text_ml) else text_ml
+            text_en = self._recognize_english(pil_img).strip()
+            text_ml = self._recognize_malayalam(pil_img).strip()
 
+            if text_ml and self._contains_malayalam(text_ml):
+                chosen_text = text_ml
+            elif text_en:
+                chosen_text = text_en
+            else:
+                chosen_text = text_en if len(text_en) >= len(text_ml) else text_ml
+
+            full_text.append(f"--- Page {page_num} ---\n{chosen_text}\n")
+
+        return "\n".join(full_text)
+    
     def save_to_pdf(self, text: str, output_path: str = "ocr_output.pdf") -> None:
         pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
         doc = SimpleDocTemplate(output_path, pagesize=A4)
