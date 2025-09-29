@@ -8,7 +8,7 @@ import requests
 import shutil
 from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
-from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentClassifier
+from functions import convert_to_pdf, HandwrittenOCR, DocumentClassifier
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 from pdf2image import convert_from_path
 import torch
