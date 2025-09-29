@@ -17,11 +17,13 @@ def get_summaries():
         return jsonify({"error": "user_id is required"}), 400
 
     try:
+        # Get user email
         user_res = supabase.table("users").select("email").eq("id", user_id).execute()
         if not user_res.data:
             return jsonify({"error": "User not found"}), 404
         recipient_email = user_res.data[0]["email"]
 
+        # Get user departments
         dept_res = supabase.table("user_departments").select("department_id").eq("user_id", user_id).execute()
         if not dept_res.data:
             return jsonify({"summaries": []}), 200
@@ -29,20 +31,24 @@ def get_summaries():
 
         summaries = []
         for dept_id in department_ids:
+            
             sum_res = supabase.table("document_summaries") \
-                .select("id, summary_text, document_id, documents(title)") \
+                .select("id, summary_text, document_id, documents(title, file_url)") \
                 .eq("department_id", dept_id) \
                 .execute()
+
             if sum_res.data:
                 for row in sum_res.data:
+                    doc_info = row.get("documents") or {}
                     summaries.append({
                         "document_id": row["document_id"],
-                        "title": row.get("documents", {}).get("title") if row.get("documents") else None,
+                        "title": doc_info.get("title"),
+                        "file_url": doc_info.get("file_url"),
                         "summary_text": row["summary_text"],
                         "department_id": dept_id
                     })
 
-      
+        # Remove duplicates keeping longest summary per document
         unique_summaries = {}
         for s in summaries:
             doc_id = s["document_id"]
@@ -50,7 +56,7 @@ def get_summaries():
                 unique_summaries[doc_id] = s
         summaries = list(unique_summaries.values())
 
-     
+        # Generate PDF
         pdf_buffer = io.BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
         styles = getSampleStyleSheet()
@@ -63,6 +69,7 @@ def get_summaries():
         doc.build(story)
         pdf_buffer.seek(0)
 
+        # Send email
         msg = Message(
             subject="Your Document Summaries",
             recipients=[recipient_email],
@@ -71,6 +78,7 @@ def get_summaries():
         msg.attach("summaries.pdf", "application/pdf", pdf_buffer.read())
         current_app.extensions['mail'].send(msg)
 
+        # Return summaries with file_url included
         return jsonify({
             "message": "Summaries fetched and emailed successfully",
             "summaries": summaries
