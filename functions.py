@@ -157,25 +157,62 @@ class PDFTranslator:
         return self._restore_links(translated_text, links)
 
     def write_text_to_pdf(self, text: str, output_pdf_path: str):
-        pdfmetrics.registerFont(UnicodeCIDFont('HeiseiMin-W3'))
+        from reportlab.lib.colors import black
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import os
+        
         doc = SimpleDocTemplate(output_pdf_path, pagesize=A4,
                                 rightMargin=40, leftMargin=40,
                                 topMargin=50, bottomMargin=50)
         styles = getSampleStyleSheet()
+        
+        # Try to register Malayalam font if available, otherwise use default
+        font_name = "Helvetica"  # Default font
+        try:
+            # Check if Malayalam font is available - use absolute path
+            malayalam_font_path = os.path.abspath("NotoSansMalayalam-Regular.ttf")
+            if os.path.exists(malayalam_font_path):
+                # Register the font with a unique name
+                pdfmetrics.registerFont(TTFont('NotoSansMalayalam', malayalam_font_path))
+                font_name = "NotoSansMalayalam"
+                print(f"Using Malayalam font: {font_name} from {malayalam_font_path}")
+                
+                # Test if the font is properly registered
+                try:
+                    test_style = ParagraphStyle("Test", fontName=font_name, fontSize=12)
+                    print(f"Font registration successful: {font_name}")
+                except Exception as test_e:
+                    print(f"Font test failed: {test_e}, falling back to Helvetica")
+                    font_name = "Helvetica"
+            else:
+                print(f"Malayalam font not found at {malayalam_font_path}, using Helvetica")
+        except Exception as e:
+            print(f"Could not register Malayalam font: {e}, using Helvetica")
+            font_name = "Helvetica"
+        
+        # Create a style with black text color and appropriate font
         normal_style = ParagraphStyle(
             "Normal",
             parent=styles["Normal"],
-            fontName="HeiseiMin-W3",
+            fontName=font_name,
             fontSize=12,
             leading=16,
+            textColor=black,  # Ensure text is black
+            spaceAfter=6,
+            alignment=0,  # Left alignment
         )
+        
         story = []
         for line in text.splitlines():
             if line.strip():
                 story.append(Paragraph(line, normal_style))
-                story.append(Spacer(1, 6))
             else:
                 story.append(Spacer(1, 12))
+        
         doc.build(story)
 
     def translate_pdf(self, input_pdf: str, output_pdf: str, direction: str) -> str:
