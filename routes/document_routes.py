@@ -8,7 +8,10 @@ import requests
 import shutil
 from flask import Blueprint, request, jsonify
 from utils.supabase import supabase
-from functions import convert_to_pdf, HandwrittenOCR, PDFTranslator, DocumentClassifier
+from functions import convert_to_pdf, HandwrittenOCR, DocumentClassifier
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+from pdf2image import convert_from_path
+import torch
 
 from Model_rag.query import summarizer
 
@@ -26,16 +29,16 @@ def sanitize_filename(filename):
     return re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
 
 def is_handwritten_file(file):
-    """Check if the uploaded file is a handwritten document based on file type and user input"""
-    # Check if user explicitly marked it as handwritten
-    is_handwritten = request.form.get("is_handwritten", "false").lower() == "true"
 
-    if is_handwritten:
-        # Verify it's an image file
-        mime_type, _ = mimetypes.guess_type(file.filename)
-        return mime_type and mime_type.startswith('image/')
-
-    return False
+    processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+    model = AutoModelForImageClassification.from_pretrained("microsoft/resnet-50")
+    images = convert_from_path(file, dpi=200)
+    img = images[0].convert("RGB")
+    inputs = processor(img, return_tensors="pt")
+    with torch.no_grad():
+        outputs = model(**inputs)
+        predicted_class = outputs.logits.argmax(-1).item()
+    return predicted_class == 1
 
 def is_pdf_file(file):
     """Check if the file is already a PDF"""
@@ -55,7 +58,8 @@ def process_uploaded_file(file, is_handwritten=False):
 
         if is_handwritten:
             ocr = HandwrittenOCR()
-            text = ocr.process_image(temp_input.name)
+            text = ocr.process_pdf(temp_input.name)
+
             ocr.save_to_pdf(text, temp_output.name)
             return temp_output.name, "handwritten_ocr"
         else:
@@ -283,6 +287,7 @@ def upload_document():
         }).execute()
 
         if not res.data:
+
             print(f"Database insert failed: {res}")
             return jsonify({"error": f"Database insert failed: {res}"}), 500
 
@@ -292,7 +297,9 @@ def upload_document():
     except Exception as db_insert_error:
         # Check if it's a duplicate content_hash error
         if "duplicate key value violates unique constraint" in str(db_insert_error) and "content_hash" in str(db_insert_error):
+
             print(f"Duplicate content detected, generating new content hash for duplicate upload")
+
             # Generate a new content hash with timestamp to make it unique
             import time
             unique_content_hash = f"{content_hash}_{int(time.time())}"
@@ -309,6 +316,7 @@ def upload_document():
                 }).execute()
 
                 if not res.data:
+
                     print(f"Retry database insert failed: {res}")
                     return jsonify({"error": f"Retry database insert failed: {res}"}), 500
 
@@ -334,7 +342,9 @@ def upload_document():
             primary_department_id = get_department_id_by_name(primary_department_name)
             
             if not primary_department_id:
+
                 print(f"Department '{primary_department_name}' not found in database, saving without department_id")
+
         
         # Insert summary into document_summaries table
         summary_data = {
@@ -347,6 +357,7 @@ def upload_document():
         summary_result = supabase.table("document_summaries").insert(summary_data).execute()
         
         if summary_result.data:
+
             print(f"Summary saved to document_summaries table for document {doc_id}")
             print(f"  - Summary ID: {summary_result.data[0]['id']}")
             print(f"  - Department ID: {primary_department_id}")
@@ -386,111 +397,17 @@ def upload_document():
             "extracted_text_preview": safe_extracted_text_preview,
             "summary": safe_summary
         }
+
         print(f"Preparing response for document {doc_id}")
+
         print(f"  - Classification results type: {type(safe_classification_results)}")
         print(f"  - Summary length: {len(safe_summary)}")
         return jsonify(response_data), 201
     
     except Exception as response_error:
+
         print(f"Error preparing response: {str(response_error)}")
         return jsonify({"error": f"Response preparation failed: {str(response_error)}"}), 500
     
 
-@docs_bp.route("/translate", methods=["POST"])
-def translate_document():
-    """Translate a PDF document using PDFTranslator"""
-    try:
-        # Check if file is provided
-        if "file" not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files["file"]
-        direction = request.form.get("direction")
-        uploaded_by = request.form.get("uploaded_by")
-        title = request.form.get("title", "Translated Document")
-        
-        if not direction:
-            return jsonify({"error": "Direction is required (ml2en or en2ml)"}), 400
-        
-        if direction not in ["ml2en", "en2ml"]:
-            return jsonify({"error": "Invalid direction. Use 'ml2en' or 'en2ml'"}), 400
-        
-        if not uploaded_by:
-            return jsonify({"error": "uploaded_by is required"}), 400
-        
-        # Check if file is a PDF
-        if not is_pdf_file(file):
-            return jsonify({"error": "Only PDF files are supported for translation"}), 400
-        
-        # Create temporary files
-        temp_input = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        
-        # Save uploaded file to temp location
-        file.save(temp_input.name)
-        file.seek(0)  # Reset file pointer
-        
-        # Translate the document
-        translator = PDFTranslator()
-        translated_text = translator.translate_pdf(temp_input.name, temp_output.name, direction)
-        
-        # Generate new filename and upload to storage
-        direction_suffix = "en" if direction == "ml2en" else "ml"
-        translated_title = f"{title}_translated_{direction_suffix}"
-        doc_uuid = str(uuid.uuid4())
-        safe_title = sanitize_filename(translated_title)[:50]
-        storage_name = f"{doc_uuid}_{safe_title}.pdf"
-        
-        # Upload translated PDF to storage
-        with open(temp_output.name, 'rb') as f:
-            supabase.storage.from_("documents_bucket").upload(
-                storage_name, f.read(),
-                {"content-type": "application/pdf"}
-            )
-        
-        translated_file_url = supabase.storage.from_("documents_bucket").get_public_url(storage_name)
-        
-        # Calculate content hash
-        with open(temp_output.name, 'rb') as f:
-            content_hash = calculate_file_hash(f)
-        
-        # Insert translated document into database
-        res = supabase.table("documents").insert({
-            "title": translated_title,
-            "file_url": translated_file_url,
-            "language": "english" if direction == "ml2en" else "malayalam",
-            "type": "translated",
-            "source": "translation",
-            "uploaded_by": uploaded_by,
-            "content_hash": content_hash
-        }).execute()
-        
-        if not res.data:
-            return jsonify({"error": "Failed to save translated document to database"}), 500
-        
-        translated_doc_id = res.data[0]["id"]
-        
-        # Clean up temporary files
-        os.unlink(temp_input.name)
-        os.unlink(temp_output.name)
-        
-        return jsonify({
-            "message": "Document translated successfully",
-            "translated_document_id": translated_doc_id,
-            "translated_file_url": translated_file_url,
-            "direction": direction,
-            "translated_text_preview": translated_text[:500] + "..." if len(translated_text) > 500 else translated_text
-        }), 200
-        
-    except Exception as e:
-        # Clean up temporary files in case of error
-        try:
-            if 'temp_input' in locals() and os.path.exists(temp_input.name):
-                os.unlink(temp_input.name)
-            if 'temp_output' in locals() and os.path.exists(temp_output.name):
-                os.unlink(temp_output.name)
-        except:
-            pass
-        
-        return jsonify({"error": f"Translation failed: {str(e)}"}), 500 
- 
+

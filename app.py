@@ -6,8 +6,9 @@ from routes.document_routes import docs_bp
 import os
 from routes.document_summary import summary_bp
 from routes.rag_routes import rag_bp
+from routes.translate_routes import translate_bp
 from dotenv import load_dotenv
-
+from flask_mail import Mail
 load_dotenv()
 
 app = Flask(__name__)
@@ -15,11 +16,22 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'secret-key')
 
 CORS(app, supports_credentials=True)
 
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = "snehajain11105@gmail.com"
+app.config['MAIL_PASSWORD'] = "gywynzlhvvvnueba"
+app.config['MAIL_DEFAULT_SENDER'] = "snehajain11105@gmail.com"
+
+
+mail = Mail(app)
+
 
 app.register_blueprint(auth_bp, url_prefix="/auth")
 app.register_blueprint(docs_bp, url_prefix="/document")
 app.register_blueprint(summary_bp, url_prefix="/summary")
 app.register_blueprint(rag_bp, url_prefix="/rag")
+app.register_blueprint(translate_bp, url_prefix="/translate")
 
 @app.route("/test")
 @jwt_optional
